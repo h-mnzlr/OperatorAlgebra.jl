@@ -1,8 +1,3 @@
-# Heiko Menzler
-# heikogeorg.menzler@stud.uni-goettingen.de
-#
-# Date: 23.10.2025
-
 """
     LinearMap(op::AbstractOp, basis; dims=nothing)
 

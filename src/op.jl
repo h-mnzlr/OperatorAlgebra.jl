@@ -1,8 +1,3 @@
-# Heiko Menzler
-# heikogeorg.menzler@stud.uni-goettingen.de
-#
-# Date: 22.10.2025
-
 """
     Op{Tid,Tmat} <: AbstractOp{Tid,Tmat}
 
