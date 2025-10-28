@@ -2,16 +2,10 @@
 
 ## Installation
 
-Since OperatorAlgebra.jl is a local package, you can add it in development mode:
+OperatorAlgebra.jl can be installed from the Julia package manager. To install the latest released version, use the Julia REPL package mode (`]`):
 
-```julia
-using Pkg
-Pkg.develop(path="/path/to/operator_algebra")
 ```
-
-Or from the Julia REPL package mode (`]`):
-```
-dev /path/to/operator_algebra
+add OperatorAlgebra
 ```
 
 ## Basic Concepts

@@ -21,11 +21,11 @@ A Julia package for working with quantum operators using an algebraic approach. 
 
 ## Installation
 
-For now, the package is not available through the Julia package manager. You can direcly install it from github, though:
+The package is available through the Julia package manager. You can directly install it from the Julia REPL:
 
 Using the Julia REPL package mode (`]`):
 ```
-add https://github.com/h-mnzlr/OperatorAlgebra.jl.git
+add OperatorAlgebra
 ```
 
 ## Quick Start
