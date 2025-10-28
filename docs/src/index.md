@@ -41,15 +41,6 @@ state = [[1.0, 0.0], [1.0, 0.0]]  # |00⟩
 new_state = apply(σx, state)       # |10⟩
 ```
 
-## Installation
-
-Since this is a local package, you can add it in development mode:
-
-```julia
-using Pkg
-Pkg.develop(path="/path/to/operator_algebra")
-```
-
 ## Contents
 
 ```@contents
