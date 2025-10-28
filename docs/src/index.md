@@ -7,7 +7,7 @@ CurrentModule = OperatorAlgebra
 
 ## Overview
 
-OperatorAlgebra.jl provides efficient representations and operations for quantum operators acting on tensor product spaces. The package is designed to provide a simple and flexible API to create and manipulate Hamiltonian operators and initialize them in a chosen Matrix representation.
+Operator Algebra provides a minimalist framework to construct Hamiltonians of arbitrary quantum systems with discrete Hilbert spaces efficiently. In particular, this package allows for the creation of the Hamiltonians operator structure without allocating large matrices, while providing the full flexibility of arithmetic operations on the algebraic ring of operators. Compared to other similar projects, OperatorAlgebra.jl allows for highly flexible indexing, where Julia's native multiple dispatched is leveraged to allow for creative implementations. OperatorAlgebra.jl is not a solution to your problems, but rather a toolbox that will help you to write simple, efficient and short codes in the familiar language of blackbord quantum mechanics.
 
 ## Key Features
 
