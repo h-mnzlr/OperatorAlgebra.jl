@@ -1,6 +1,6 @@
 # OperatorAlgebra.jl
 
-<!--[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://h-mnzlr.github.io/OperatorAlgebra.jl/stable)-->
+[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://h-mnzlr.github.io/OperatorAlgebra.jl/stable)
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://h-mnzlr.github.io/OperatorAlgebra.jl/dev)
 [![CI](https://github.com/h-mnzlr/OperatorAlgebra.jl/workflows/CI/badge.svg)](https://github.com/h-mnzlr/OperatorAlgebra.jl/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/h-mnzlr/OperatorAlgebra.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/h-mnzlr/OperatorAlgebra.jl)
