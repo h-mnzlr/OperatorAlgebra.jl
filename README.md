@@ -15,9 +15,7 @@ A Julia package for working with quantum operators using an algebraic approach. 
   - `OpSum`: Sums of operators (linear combinations)
 
 - **Efficient Representations**: Support for both dense and sparse matrices
-- **Tensor Product Operations**: Easy construction of operators on multi-site systems
 - **LinearMap Integration**: Efficient matrix-free operator representations
-- **Type Stability**: Fully type-stable implementation for optimal performance
 
 ## Installation
 
