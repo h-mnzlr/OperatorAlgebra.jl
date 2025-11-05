@@ -43,21 +43,26 @@ chain' == σz' * σy' * σx'  # true
 See also: [`Op`](@ref), [`OpSum`](@ref), [`apply`](@ref), `sparse`
 """
 struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
-    ops::Vector{<:AbstractOp{Tid,Tmat}}
+    ops::Vector{<:Op{Tid,Tmat}}
 
-    function OpChain(ops::Vararg{AbstractOp})
+    function OpChain(ops::Vararg{Op})
         Tid = promote_type(map(o -> sitetype(o), ops)...)
         Tmat = promote_type(map(o -> eltype(o), ops)...)
 
         converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in ops]
-        new{Tid,Tmat}(converted_ops)
+        site_ids = unique(o.site for o in converted_ops)
+        simplified_ops = map(site_ids) do s
+            ops_on_site = filter(o -> o.site == s, converted_ops)
+            reduce(*, ops_on_site)
+        end
+        new{Tid,Tmat}(simplified_ops)
     end
 end
 
-Base.:*(ops::Vararg{AbstractOp}) = OpChain(ops...)
+Base.:*(ops::Vararg{Op}) = OpChain(ops...)
 Base.:*(A::OpChain, B::OpChain) = OpChain(A.ops..., B.ops...)
-Base.:*(A::OpChain, B::AbstractOp) = OpChain(A.ops..., B)
-Base.:*(A::AbstractOp, B::OpChain) = OpChain(A, B.ops...)
+Base.:*(A::OpChain, B::Op) = OpChain(A.ops..., B)
+Base.:*(A::Op, B::OpChain) = OpChain(A, B.ops...)
 Base.:*(A::Op, B::Op) = begin
     A.site == B.site && return Op(A.mat * B.mat, A.site)
     OpChain(A, B)

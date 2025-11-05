@@ -2,7 +2,7 @@ using Test
 using LinearAlgebra
 
 @testset "OpChain Constructor Tests" begin
-    @testset "Basic Constructor with two operators" begin
+    @testset "Basic Constructor with two operators on different sites" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
         
@@ -102,12 +102,88 @@ using LinearAlgebra
         @test opchain isa OpChain{Int64, ComplexF64}
     end
     
-    @testset "Constructor with many operators" begin
+    @testset "Constructor with many operators on different sites" begin
         ops = [Op(rand(3, 3), i) for i in 1:10]
         opchain = OpChain(ops...)
         
         @test length(opchain.ops) == 10
         @test opchain isa OpChain{Int64, Float64}
+    end
+    
+    @testset "Constructor simplifies operators on same site" begin
+        # Multiple operators on site 1 should be multiplied together
+        op1 = Op([1 0; 0 2], 1)
+        op2 = Op([2 0; 0 1], 1)
+        
+        opchain = OpChain(op1, op2)
+        
+        # Should have only 1 operator (merged)
+        @test length(opchain.ops) == 1
+        @test opchain.ops[1].site == 1
+        @test opchain.ops[1].mat == op1.mat * op2.mat
+        @test opchain.ops[1].mat == [2 0; 0 2]
+    end
+    
+    @testset "Constructor simplifies mixed sites" begin
+        # ops: 1, 2, 1, 2 -> should merge to 2 operators (one for site 1, one for site 2)
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        op3 = Op([2 0; 0 2], 1)
+        op4 = Op([1 1; 1 1], 2)
+        
+        opchain = OpChain(op1, op2, op3, op4)
+        
+        # Should have 2 operators (one per unique site)
+        @test length(opchain.ops) == 2
+        
+        # Find ops by site
+        site1_op = findfirst(op -> op.site == 1, opchain.ops)
+        site2_op = findfirst(op -> op.site == 2, opchain.ops)
+        
+        @test !isnothing(site1_op)
+        @test !isnothing(site2_op)
+        
+        # Site 1: op1 * op3 = [1 0; 0 1] * [2 0; 0 2] = [2 0; 0 2]
+        @test opchain.ops[site1_op].mat == [2 0; 0 2]
+        
+        # Site 2: op2 * op4 = [0 1; 1 0] * [1 1; 1 1] = [1 1; 1 1]
+        @test opchain.ops[site2_op].mat == [1 1; 1 1]
+    end
+    
+    @testset "Constructor preserves order in simplification" begin
+        # Matrix multiplication is not commutative, verify order is preserved
+        op1 = Op([1 2; 0 1], 1)
+        op2 = Op([1 0; 3 1], 1)
+        
+        opchain = OpChain(op1, op2)
+        
+        @test length(opchain.ops) == 1
+        # Should be op1 * op2 in that order
+        expected = [1 2; 0 1] * [1 0; 3 1]
+        @test opchain.ops[1].mat == expected
+        @test opchain.ops[1].mat == [7 2; 3 1]
+    end
+    
+    @testset "Constructor simplifies three operators on same site" begin
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([2 0; 0 2], 1)
+        op3 = Op([3 0; 0 3], 1)
+        
+        opchain = OpChain(op1, op2, op3)
+        
+        @test length(opchain.ops) == 1
+        @test opchain.ops[1].mat == [6 0; 0 6]
+    end
+    
+    @testset "Constructor simplification with complex matrices" begin
+        op1 = Op([1+im 0; 0 1], 1)
+        op2 = Op([1 0; 0 1-im], 1)
+        
+        opchain = OpChain(op1, op2)
+        
+        @test length(opchain.ops) == 1
+        expected = [1+im 0; 0 1] * [1 0; 0 1-im]
+        @test opchain.ops[1].mat == expected
     end
     
     @testset "Type promotion with multiple Int types" begin
@@ -158,7 +234,7 @@ end
         @test length(result.ops) == 2
     end
     
-    @testset "OpChain * OpChain" begin
+    @testset "OpChain * OpChain (all different sites)" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
         op3 = Op([1 1; 1 1], 3)
@@ -177,7 +253,38 @@ end
         @test result.ops[4].site == 4
     end
     
-    @testset "OpChain * Op" begin
+    @testset "OpChain * OpChain with site overlap gets simplified" begin
+        # chain1: sites 1, 2
+        # chain2: sites 2, 3
+        # result should have sites 1, 2 (merged), 3
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        op3 = Op([1 1; 1 1], 2)
+        op4 = Op([2 0; 0 2], 3)
+        
+        chain1 = OpChain(op1, op2)
+        chain2 = OpChain(op3, op4)
+        
+        result = chain1 * chain2
+        
+        @test result isa OpChain
+        @test length(result.ops) == 3  # Three unique sites after simplification
+        
+        # Find operators by site
+        site1_idx = findfirst(op -> op.site == 1, result.ops)
+        site2_idx = findfirst(op -> op.site == 2, result.ops)
+        site3_idx = findfirst(op -> op.site == 3, result.ops)
+        
+        @test !isnothing(site1_idx)
+        @test !isnothing(site2_idx)
+        @test !isnothing(site3_idx)
+        
+        # Site 2 should have op2 * op3
+        expected_site2 = [0 1; 1 0] * [1 1; 1 1]
+        @test result.ops[site2_idx].mat == expected_site2
+    end
+    
+    @testset "OpChain * Op on new site" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
         op3 = Op([1 1; 1 1], 3)
@@ -187,10 +294,27 @@ end
         
         @test result isa OpChain
         @test length(result.ops) == 3
-        @test result.ops[3].site == 3
+        @test any(op -> op.site == 3, result.ops)
     end
     
-    @testset "Op * OpChain" begin
+    @testset "OpChain * Op on existing site gets simplified" begin
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        op3 = Op([2 0; 0 2], 2)  # Same site as op2
+        
+        opchain = OpChain(op1, op2)
+        result = opchain * op3
+        
+        @test result isa OpChain
+        @test length(result.ops) == 2  # Simplified: sites 1 and 2
+        
+        site2_idx = findfirst(op -> op.site == 2, result.ops)
+        @test !isnothing(site2_idx)
+        # Should be op2 * op3
+        @test result.ops[site2_idx].mat == [0 1; 1 0] * [2 0; 0 2]
+    end
+    
+    @testset "Op * OpChain on new site" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
         op3 = Op([1 1; 1 1], 3)
@@ -200,19 +324,42 @@ end
         
         @test result isa OpChain
         @test length(result.ops) == 3
-        @test result.ops[1].site == 1
+        @test any(op -> op.site == 1, result.ops)
     end
     
-    @testset "Multiple multiplications create OpChain" begin
+    @testset "Op * OpChain on existing site gets simplified" begin
+        op1 = Op([2 0; 0 2], 1)
+        op2 = Op([1 0; 0 1], 1)  # Same site as op1
+        op3 = Op([0 1; 1 0], 2)
+        
+        opchain = OpChain(op2, op3)
+        result = op1 * opchain
+        
+        @test result isa OpChain
+        @test length(result.ops) == 2  # Simplified: sites 1 and 2
+        
+        site1_idx = findfirst(op -> op.site == 1, result.ops)
+        @test !isnothing(site1_idx)
+        # Should be op1 * op2
+        @test result.ops[site1_idx].mat == [2 0; 0 2] * [1 0; 0 1]
+    end
+    
+    @testset "Multiple multiplications create OpChain with simplification" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        op4 = Op([2 2; 2 2], 4)
+        op3 = Op([1 1; 1 1], 1)  # Same site as op1
+        op4 = Op([2 2; 2 2], 3)
         
         result = op1 * op2 * op3 * op4
         
         @test result isa OpChain
-        @test length(result.ops) == 4
+        # Sites 1, 2, 3 (op1 and op3 merged)
+        @test length(result.ops) == 3
+        
+        site1_idx = findfirst(op -> op.site == 1, result.ops)
+        @test !isnothing(site1_idx)
+        # op1 * op3
+        @test result.ops[site1_idx].mat == [1 0; 0 1] * [1 1; 1 1]
     end
     
     @testset "Multiplication with type promotion (Float)" begin
@@ -233,7 +380,8 @@ end
         result2 = op1 * (op2 * op3)
         
         @test length(result1.ops) == length(result2.ops)
-        @test result1.ops[1].site == result2.ops[1].site
+        # All on different sites, so should have same site IDs
+        @test Set([op.site for op in result1.ops]) == Set([op.site for op in result2.ops])
     end
 end
 
@@ -246,8 +394,11 @@ end
         result = 3 * opchain
         
         @test length(result.ops) == 2
-        @test result.ops[1].mat == [3 0; 0 3]
-        @test result.ops[2].mat == [0 3; 3 0]
+        # Check by site since order might vary
+        site1_idx = findfirst(op -> op.site == 1, result.ops)
+        site2_idx = findfirst(op -> op.site == 2, result.ops)
+        @test result.ops[site1_idx].mat == [3 0; 0 3]
+        @test result.ops[site2_idx].mat == [0 3; 3 0]
     end
     
     @testset "OpChain * Scalar (right multiplication)" begin
@@ -258,8 +409,10 @@ end
         result = opchain * 3
         
         @test length(result.ops) == 2
-        @test result.ops[1].mat == [3 0; 0 3]
-        @test result.ops[2].mat == [0 3; 3 0]
+        site1_idx = findfirst(op -> op.site == 1, result.ops)
+        site2_idx = findfirst(op -> op.site == 2, result.ops)
+        @test result.ops[site1_idx].mat == [3 0; 0 3]
+        @test result.ops[site2_idx].mat == [0 3; 3 0]
     end
     
     @testset "Float scalar * OpChain" begin
@@ -380,8 +533,11 @@ end
         opchain = OpChain(id1, id2)
         
         @test length(opchain.ops) == 2
-        @test opchain.ops[1].mat == I(2)
-        @test opchain.ops[2].mat == I(2)
+        # Find by site since order might vary
+        site1_idx = findfirst(op -> op.site == 1, opchain.ops)
+        site2_idx = findfirst(op -> op.site == 2, opchain.ops)
+        @test opchain.ops[site1_idx].mat == I(2)
+        @test opchain.ops[site2_idx].mat == I(2)
     end
     
     @testset "OpChain with different sized matrices" begin
@@ -390,15 +546,38 @@ end
         
         opchain = OpChain(op1, op2)
         
-        @test size(opchain.ops[1].mat) == (2, 2)
-        @test size(opchain.ops[2].mat) == (3, 3)
+        # Find by site
+        site1_idx = findfirst(op -> op.site == 1, opchain.ops)
+        site2_idx = findfirst(op -> op.site == 2, opchain.ops)
+        @test size(opchain.ops[site1_idx].mat) == (2, 2)
+        @test size(opchain.ops[site2_idx].mat) == (3, 3)
     end
     
-    @testset "Large OpChain" begin
+    @testset "Large OpChain with all different sites" begin
         ops = [Op(rand(5, 5), i) for i in 1:100]
         opchain = OpChain(ops...)
         
         @test length(opchain.ops) == 100
+    end
+    
+    @testset "Large OpChain with repeated sites" begin
+        # 50 operators, but only 10 unique sites
+        ops = [Op(rand(3, 3), mod(i-1, 10) + 1) for i in 1:50]
+        opchain = OpChain(ops...)
+        
+        # Should be simplified to 10 operators (one per unique site)
+        @test length(opchain.ops) == 10
+        @test all(op isa Op for op in opchain.ops)
+    end
+    
+    @testset "OpChain stores only Op objects" begin
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        
+        opchain = OpChain(op1, op2)
+        
+        # Verify all stored operators are Op, not other AbstractOp types
+        @test all(op isa Op for op in opchain.ops)
     end
 end
 

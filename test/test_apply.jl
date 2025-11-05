@@ -299,23 +299,6 @@ end
         @test state[2] == [0, -1]
     end
     
-    @testset "apply with nested OpChain" begin
-        state = [[1, 0], [0, 1]]
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([0 1; 1 0], 2)
-        chain1 = OpChain(op1, op2)
-        op3 = Op([1 0; 0 -1], 1)
-        chain2 = OpChain(chain1, op3)
-        
-        result = apply(chain2, state)
-        
-        # Should apply: op3, then chain1 (which does op2, op1 in reverse)
-        # op3: Z on site 1: |0⟩ -> |0⟩
-        # op2: X on site 2: |1⟩ -> |0⟩
-        # op1: X on site 1: |0⟩ -> |1⟩
-        @test result[1] == [0, 1]
-        @test result[2] == [1, 0]
-    end
     
     @testset "apply! preserves complex phases" begin
         state = [[1.0+0im, 0], [0, 1]]
@@ -727,19 +710,6 @@ end
         @test state[2.0] == [0, 1]  # Unchanged
     end
     
-    @testset "apply with Dict state and nested OpChain" begin
-        state = Dict(1 => [1, 0], 2 => [0, 1])
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([0 1; 1 0], 2)
-        chain1 = OpChain(op1, op2)
-        op3 = Op([1 0; 0 -1], 1)
-        chain2 = OpChain(chain1, op3)
-        
-        result = apply(chain2, state)
-        
-        @test result[1] == [0, 1]
-        @test result[2] == [1, 0]
-    end
     
     @testset "apply with Dict state - large number of sites" begin
         state = Dict(i => rand(2) for i in 1:100)
