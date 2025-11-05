@@ -70,6 +70,7 @@ include("opsum.jl")
 
 include("op_constants.jl")
 include("kron.jl")
+include("linalg.jl")
 include("array.jl")
 include("sparse.jl")
 include("apply.jl")
