@@ -40,7 +40,7 @@ using SparseArrays
 product = σx * σz
 
 # Create operator sums (OpSum)
-hamiltonian = σx + σz
+hamiltonian = σx + σz + 0.5 * product
 
 # Convert to matrix representation
 basis = [1, 2]
