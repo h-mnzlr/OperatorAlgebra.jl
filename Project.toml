@@ -1,7 +1,7 @@
 name = "OperatorAlgebra"
 uuid = "49087e99-997d-48ed-8945-d57b707c274b"
 authors = ["h-mnzlr <67161416+h-mnzlr@users.noreply.github.com>"]
-version = "0.1.2"
+version = "0.2.0"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -9,7 +9,7 @@ LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [weakdeps]
-ITensorMPS = "0d1a4710-d33b-49a5-ba18-788d6f588a97"
+ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
 
 [extensions]
 OperatorAlgebraITensorMPSExt = "ITensorMPS"

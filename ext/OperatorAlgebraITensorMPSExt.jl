@@ -1,3 +1,32 @@
+"""
+# OperatorAlgebraITensorMPSExt
+
+Extension module providing integration between OperatorAlgebra.jl and ITensorMPS.jl.
+
+This extension automatically loads when both OperatorAlgebra and ITensorMPS are imported,
+enabling conversion of OperatorAlgebra operators (Op, OpChain, OpSum) to ITensorMPS MPOs.
+
+## Usage
+
+```julia
+using OperatorAlgebra
+using ITensorMPS  # Extension loads automatically
+
+# Define sites
+sites = siteinds("S=1/2", 4)
+
+# Create operators
+σx = Op(PAULI_X, 1)
+σz = Op(PAULI_Z, 2)
+hamiltonian = σx + σz + 0.5 * (σx * σz)
+
+# Convert to MPO
+mpo = MPO(hamiltonian, sites)
+```
+
+All operator types from OperatorAlgebra can be converted to Matrix Product Operators (MPOs)
+for use with ITensorMPS algorithms.
+"""
 module OperatorAlgebraITensorMPSExt
 
 using OperatorAlgebra

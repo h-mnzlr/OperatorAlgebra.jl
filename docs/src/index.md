@@ -20,6 +20,12 @@ Operator Algebra provides a minimalist framework to construct Hamiltonians of ar
   - Easily convert your abstract operators into different Matrix representations.
   - Initialize the matrix efficiently as sparse, dense or memory-less.
 
+- **Linear Algebra Operations**:
+  - Compute traces of operators on tensor product spaces.
+
+- **ITensor Integration**:
+  - Automatic conversion to Matrix Product Operators (MPOs) when ITensorMPS.jl is loaded.
+
 ## Quick Example
 
 ```julia

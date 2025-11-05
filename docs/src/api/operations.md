@@ -42,6 +42,30 @@ The `LinearMap` function from LinearMaps.jl is extended to work with operators:
 
 See the [Matrix Representations](../guide/matrix_representation.md) guide for examples.
 
+## Linear Algebra Operations
+
+```@docs
+LinearAlgebra.tr(::Op, ::Any)
+LinearAlgebra.tr(::OpChain, ::Any)
+LinearAlgebra.tr(::OpSum, ::Any)
+```
+
+## ITensorMPS Integration
+
+When ITensorMPS.jl is loaded, operators can be converted to Matrix Product Operators (MPOs):
+
+```julia
+using OperatorAlgebra
+using ITensorMPS  # Extension loads automatically
+
+sites = siteinds("S=1/2", 4)
+H = Op(PAULI_X, 1) + Op(PAULI_Z, 2)
+mpo = MPO(H, sites)
+```
+
+The extension provides:
+- `MPO(op::AbstractOp, sites)`: Convert any OperatorAlgebra operator to an ITensorMPS MPO
+
 ## Index
 
 ```@index

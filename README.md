@@ -16,6 +16,8 @@ A Julia package for working with quantum operators using an algebraic approach. 
 
 - **Efficient Representations**: Support for both dense and sparse matrices
 - **LinearMap Integration**: Efficient matrix-free operator representations
+- **Linear Algebra Operations**: Trace calculations for operators on tensor product spaces
+- **ITensor Integration**: Automatic conversion to Matrix Product Operators (MPOs) when ITensorMPS.jl is loaded
 
 ## Installation
 
@@ -45,6 +47,45 @@ hamiltonian = σx + σz + 0.5 * product
 # Convert to matrix representation
 basis = [1, 2]
 H_matrix = sparse(hamiltonian, basis)
+```
+
+## Simple Linear Algebra Operations
+
+Compute traces of operators over tensor product spaces:
+
+```julia
+using LinearAlgebra
+
+# Single operator trace
+σz = Op(PAULI_Z, 1)
+tr(σz, [1, 2])  # Trace over 2-site system
+
+# Trace of operator products and sums
+product = σx * σz
+tr(product, [1, 2])
+
+hamiltonian = σx + σz + 0.5 * product
+tr(hamiltonian, [1, 2])
+```
+
+## ITensorMPS Integration
+
+When ITensorMPS.jl is loaded, operators can be automatically converted to Matrix Product Operators:
+
+```julia
+using OperatorAlgebra
+using ITensorMPS  # Extension loads automatically
+
+# Define a spin chain
+sites = siteinds("S=1/2", 4)
+
+# Create a Hamiltonian
+σx = Op(PAULI_X, 1)
+σz = Op(PAULI_Z, 2)
+H = σx + σz + 0.5 * (σx * σz)
+
+# Convert to MPO for use with ITensor algorithms
+mpo = MPO(H, sites)
 ```
 
 ## Contributing
