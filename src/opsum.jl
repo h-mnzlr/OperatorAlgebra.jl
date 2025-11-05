@@ -73,6 +73,7 @@ Base.:*(A::OpSum, s::Number) = OpSum([op * s for op in A.ops]...)
 # chaining with an opsum operator gives an opsum again
 Base.:*(A::OpSum, o::AbstractOp) = OpSum([op * o for op in A.ops]...)
 Base.:*(o::AbstractOp, A::OpSum) = OpSum([o * op for op in A.ops]...)
+Base.:*(A::OpSum, B::OpSum) = OpSum([ol * or for (ol, or) in Iterators.product(A.ops, B.ops)]...)
 
 Base.adjoint(os::OpSum) = OpSum([adjoint(op) for op in os.ops]...)
 

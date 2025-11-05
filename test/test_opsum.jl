@@ -267,6 +267,189 @@ end
     end
 end
 
+@testset "OpSum Multiplication Tests" begin
+    @testset "OpSum * Op" begin
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        op3 = Op([1 1; 1 1], 3)
+        
+        opsum = OpSum(op1, op2)
+        result = opsum * op3
+        
+        @test result isa OpSum
+        @test length(result.ops) == 2
+        # Each op in the sum should be multiplied by op3
+        @test result.ops[1] isa OpChain
+        @test result.ops[2] isa OpChain
+    end
+    
+    @testset "Op * OpSum" begin
+        op1 = Op([1 1; 1 1], 1)
+        op2 = Op([1 0; 0 1], 2)
+        op3 = Op([0 1; 1 0], 3)
+        
+        opsum = OpSum(op2, op3)
+        result = op1 * opsum
+        
+        @test result isa OpSum
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpChain
+        @test result.ops[2] isa OpChain
+    end
+    
+    @testset "OpSum * OpSum (2x2 expansion)" begin
+        # (A + B) * (C + D) = AC + AD + BC + BD
+        opA = Op([1 0; 0 1], 1)
+        opB = Op([0 1; 1 0], 2)
+        opC = Op([1 1; 1 1], 3)
+        opD = Op([2 2; 2 2], 4)
+        
+        sum1 = OpSum(opA, opB)
+        sum2 = OpSum(opC, opD)
+        
+        result = sum1 * sum2
+        
+        @test result isa OpSum
+        # Should have 2 * 2 = 4 terms
+        @test length(result.ops) == 4
+        
+        # Verify all products are OpChains
+        for op in result.ops
+            @test op isa OpChain
+        end
+    end
+    
+    @testset "OpSum * OpSum (3x2 expansion)" begin
+        # (A + B + C) * (D + E) should give 6 terms
+        opA = Op([1 0; 0 1], 1)
+        opB = Op([0 1; 1 0], 2)
+        opC = Op([1 1; 1 1], 3)
+        opD = Op([2 0; 0 2], 4)
+        opE = Op([0 2; 2 0], 5)
+        
+        sum1 = OpSum(opA, opB, opC)
+        sum2 = OpSum(opD, opE)
+        
+        result = sum1 * sum2
+        
+        @test result isa OpSum
+        # Should have 3 * 2 = 6 terms
+        @test length(result.ops) == 6
+    end
+    
+    @testset "OpSum * OpSum (single term each)" begin
+        # Edge case: (A) * (B) should give single term AB
+        opA = Op([1 0; 0 1], 1)
+        opB = Op([0 1; 1 0], 2)
+        
+        sum1 = OpSum(opA)
+        sum2 = OpSum(opB)
+        
+        result = sum1 * sum2
+        
+        @test result isa OpSum
+        @test length(result.ops) == 1
+        @test result.ops[1] isa OpChain
+    end
+    
+    @testset "OpSum * OpSum expansion is complete" begin
+        # Verify that (σx₁ + σy₂) * (σz₃ + σx₄) gives all 4 products
+        σx = [0 1; 1 0]
+        σy = [0 -im; im 0]
+        σz = [1 0; 0 -1]
+        
+        opX1 = Op(σx, 1)
+        opY2 = Op(σy, 2)
+        opZ3 = Op(σz, 3)
+        opX4 = Op(σx, 4)
+        
+        sum1 = OpSum(opX1, opY2)
+        sum2 = OpSum(opZ3, opX4)
+        
+        result = sum1 * sum2
+        
+        @test result isa OpSum
+        @test length(result.ops) == 4
+        
+        # Extract the chains
+        chains = result.ops
+        
+        # Verify we have all 4 combinations
+        # Each chain should have 2 operators
+        for chain in chains
+            @test chain isa OpChain
+            @test length(chain.ops) == 2
+        end
+    end
+    
+    @testset "OpSum * OpSum with type promotion" begin
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        op3 = Op([1.0 0.0; 0.0 1.0], 3)
+        op4 = Op([0.0 1.0; 1.0 0.0], 4)
+        
+        sum1 = OpSum(op1, op2)
+        sum2 = OpSum(op3, op4)
+        
+        result = sum1 * sum2
+        
+        @test result isa OpSum{Int64, Float64}
+        @test length(result.ops) == 4
+    end
+    
+    @testset "OpSum * OpSum is distributive" begin
+        # Verify (A + B) * C == A*C + B*C by comparing to manual calculation
+        A = Op([1 0; 0 2], 1)
+        B = Op([3 0; 0 4], 2)
+        C = Op([5 6; 7 8], 3)
+        
+        sum_AB = OpSum(A, B)
+        sum_C = OpSum(C)
+        
+        # Left distributivity
+        result_left = sum_AB * C
+        manual_left = (A * C) + (B * C)
+        
+        @test result_left isa OpSum
+        @test manual_left isa OpSum
+        @test length(result_left.ops) == length(manual_left.ops)
+        
+        # Right distributivity
+        result_right = C * sum_AB
+        manual_right = (C * A) + (C * B)
+        
+        @test result_right isa OpSum
+        @test manual_right isa OpSum
+        @test length(result_right.ops) == length(manual_right.ops)
+    end
+    
+    @testset "Scalar * OpSum" begin
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        opsum = OpSum(op1, op2)
+        
+        result = 2.0 * opsum
+        
+        @test result isa OpSum
+        @test length(result.ops) == 2
+        @test result.ops[1].mat == 2.0 * [1 0; 0 1]
+        @test result.ops[2].mat == 2.0 * [0 1; 1 0]
+    end
+    
+    @testset "OpSum * Scalar" begin
+        op1 = Op([1 0; 0 1], 1)
+        op2 = Op([0 1; 1 0], 2)
+        opsum = OpSum(op1, op2)
+        
+        result = opsum * 3
+        
+        @test result isa OpSum
+        @test length(result.ops) == 2
+        @test result.ops[1].mat == 3 * [1 0; 0 1]
+        @test result.ops[2].mat == 3 * [0 1; 1 0]
+    end
+end
+
 @testset "OpSum Adjoint Tests" begin
     @testset "Adjoint of OpSum with two operators" begin
         op1 = Op([1 2; 3 4], 1)
