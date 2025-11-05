@@ -33,4 +33,7 @@ Return the type used for site identifiers in the operator.
 """
 sitetype(::AbstractOp{Tid,Tmat}) where {Tid,Tmat} = Tid
 
-Base.:-(A::AbstractOp, B::AbstractOp) = A + -one(eltype(B)) * B
+Base.:-(A::AbstractOp, B::AbstractOp) = A + -B
+Base.:-(A::AbstractOp) = -one(eltype(A)) * A
+
+Base.:/(A::AbstractOp, s::Number) = inv(s) * A
