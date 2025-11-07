@@ -34,4 +34,5 @@ deploydocs(
     repo = "github.com/h-mnzlr/OperatorAlgebra.jl.git",
     devbranch = "main",
     push_preview = true,
+    forcepush = true
 )
