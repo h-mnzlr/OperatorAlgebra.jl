@@ -48,15 +48,22 @@ tr(product, [1, 2])  # Trace of σx ⊗ σz
 """
 LinearAlgebra.tr(oc::OpChain, basis) = tr(oc, basis, fill(size(first(oc.ops).mat, 1), length(basis)))
 LinearAlgebra.tr(oc::OpChain, basis, dims) = begin
-    opsites = [o.site for o in oc.ops]
-    
+    @warn "tr(::OpChain) is not defined for fermionic operators."
+
+    site_ids = unique(o.site for o in oc.ops)
+    sorted_ops = map(site_ids) do s
+        ops_on_site = filter(o -> o.site == s, oc.ops)
+        reduce(*, ops_on_site)
+    end
+
+    opsites = [o.site for o in sorted_ops]
     tro = one(eltype(oc))
     for (i, d) in zip(basis, dims)
         opidx = findfirst(==(i), opsites)
         if isnothing(opidx) 
             tro *= d
         else
-            tro *= tr(oc.ops[opidx].mat)
+            tro *= tr(sorted_ops[opidx].mat)
         end
     end
     tro

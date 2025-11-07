@@ -50,12 +50,12 @@ struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
         Tmat = promote_type(map(o -> eltype(o), ops)...)
 
         converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in ops]
-        site_ids = unique(o.site for o in converted_ops)
-        simplified_ops = map(site_ids) do s
-            ops_on_site = filter(o -> o.site == s, converted_ops)
-            reduce(*, ops_on_site)
-        end
-        new{Tid,Tmat}(simplified_ops)
+        # site_ids = unique(o.site for o in converted_ops)
+        # simplified_ops = map(site_ids) do s
+        #     ops_on_site = filter(o -> o.site == s, converted_ops)
+        #     reduce(*, ops_on_site)
+        # end
+        new{Tid,Tmat}(converted_ops)
     end
 end
 
