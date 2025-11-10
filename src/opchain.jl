@@ -50,11 +50,6 @@ struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
         Tmat = promote_type(map(o -> eltype(o), ops)...)
 
         converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in ops]
-        # site_ids = unique(o.site for o in converted_ops)
-        # simplified_ops = map(site_ids) do s
-        #     ops_on_site = filter(o -> o.site == s, converted_ops)
-        #     reduce(*, ops_on_site)
-        # end
         new{Tid,Tmat}(converted_ops)
     end
 end
@@ -69,8 +64,17 @@ Base.:*(A::Op, B::Op) = begin
 end
 
 # scalar multiplication
-Base.:*(oc::OpChain, s::Number) = OpChain([op * s for op in oc.ops]...)
-Base.:*(s::Number, oc::OpChain) = OpChain([s * op for op in oc.ops]...)
+Base.:*(s::Number, oc::OpChain) = begin
+    seen_sites = Set{sitetype(oc)}()
+    ops = map(oc.ops) do op
+        op.site in seen_sites && return op
+
+        push!(seen_sites, op.site)
+        op * s
+    end
+    OpChain(ops...)
+end
+Base.:*(oc::OpChain, s::Number) = s * oc
 
 Base.adjoint(oc::OpChain) = OpChain([adjoint(op) for op in reverse(oc.ops)]...)
 
