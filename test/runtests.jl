@@ -10,4 +10,5 @@ using OperatorAlgebra
     include("test_op_constants.jl")
     include("test_linalg.jl")
     include("test_apply.jl")
+    include("test_sites.jl")
 end

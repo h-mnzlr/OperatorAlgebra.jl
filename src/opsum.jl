@@ -92,3 +92,5 @@ Base.show(io::IO, os::OpSum) = begin
     end
     print(io, "])")
 end
+
+sites(os::OpSum) = vcat([sites(op) for op in os.ops]...) |> unique |> _sort_if_sortable!

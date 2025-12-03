@@ -29,3 +29,4 @@ H_matrix = sparse(H, basis)
 See also: [`atsite`](@ref), `LinearMap`, [`OpSum`](@ref), [`OpChain`](@ref)
 """
 SparseArrays.sparse(op::AbstractOp, basis) = atsite(sparse, op, basis)
+SparseArrays.sparse(op::AbstractOp) = sparse(op, sites(op))

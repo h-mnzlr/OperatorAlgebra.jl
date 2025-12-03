@@ -39,3 +39,13 @@ Base.:*(A::AbstractOp) = A
 Base.:/(A::AbstractOp, s::Number) = inv(s) * A
 
 Base.:-(A::AbstractOp, B::AbstractOp) = A + -B
+
+""" 
+    sites(op::AbstractOp)
+
+Return a vector of site identifiers where the operator acts.
+"""
+sites(::AbstractOp) = error("sites function not implemented for $(typeof(op))")
+
+_sort_if_sortable!(vs::Vector{T}) where {T} = _is_sortable(T) ? sort!(vs) : vs 
+_is_sortable(T) = hasmethod(isless, Tuple{T,T})

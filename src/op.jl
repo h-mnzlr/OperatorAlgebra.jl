@@ -51,3 +51,5 @@ Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} =
     Op(convert(AbstractMatrix{Tmat}, A.mat), convert(Tid, A.site))
 
 Base.show(io::IO, op::Op) = print(io, "Op(site=$(op.site), mat=$(op.mat))")
+
+sites(op::Op) = [op.site]
