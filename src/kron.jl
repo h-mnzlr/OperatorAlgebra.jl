@@ -116,13 +116,8 @@ function atsite(T, op::Op, basis, dims; ids=map(I, dims))
     idx_kron = findfirst(x -> x == op.site, basis)
     idx_kron === nothing && throw(ArgumentError("Site $(op.site) not found in basis"))
 
-    #display(ids)
-
     Is_left = ids[1:idx_kron - 1]
     Is_right = ids[(idx_kron + 1):end]
-
-    #display(Is_left)
-    #display(Is_right)
 
     idx_kron == 1 && return T(op.mat) ⊗ kron(Is_right...)
     idx_kron == length(basis) && return kron(Is_left...) ⊗ T
