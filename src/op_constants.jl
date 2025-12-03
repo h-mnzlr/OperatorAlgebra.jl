@@ -6,6 +6,7 @@ Sparse Pauli X (σₓ) matrix: [[0, 1], [1, 0]]
 The bit-flip operator. Exchanges |0⟩ ↔ |1⟩.
 """
 const PAULI_X = [0 1; 1 0]
+const SPIN_X = PAULI_X/2
 
 """
     PAULI_Y
@@ -15,6 +16,7 @@ Sparse Pauli Y (σᵧ) matrix: [[0, -i], [i, 0]]
 The phase-flip and bit-flip operator.
 """
 const PAULI_Y = [0 -im; im 0]
+const SPIN_Y = PAULI_Y/2
 
 """
     PAULI_Z
@@ -24,6 +26,7 @@ Sparse Pauli Z (σᵧ) matrix: [[1, 0], [0, -1]]
 The phase-flip operator. Maps |0⟩ → |0⟩, |1⟩ → -|1⟩.
 """
 const PAULI_Z = [1 0; 0 -1]
+const SPIN_Z = PAULI_Z/2
 
 """
     OCC_PART
