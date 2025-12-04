@@ -47,6 +47,10 @@ Base.:*(A::Op, s::Number) = Op(A.mat * s, A.site)
 Base.:*(s::Number, A::Op) = A * s
 Base.adjoint(A::Op) = Op(adjoint(A.mat), A.site)
 
+Base.one(op::Op) = Op(LinearAlgebra.I(size(op.mat, 1)), op.site)
+Base.zero(op::Op) = Op(zero(op.mat), op.site)
+Base.iszero(A::Op) = iszero(A.mat)
+
 Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} = 
     Op(convert(AbstractMatrix{Tmat}, A.mat), convert(Tid, A.site))
 

@@ -54,13 +54,28 @@ struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     end
 end
 
-Base.:*(ops::Vararg{Op}) = OpChain(ops...)
-Base.:*(A::OpChain, B::OpChain) = OpChain(A.ops..., B.ops...)
-Base.:*(A::OpChain, B::Op) = OpChain(A.ops..., B)
-Base.:*(A::Op, B::OpChain) = OpChain(A, B.ops...)
+Base.:*(ops::Vararg{Op}) = begin
+    # combine consecutive operators on same site
+    for i in 1:length(ops)-1
+        if ops[i].site == ops[i+1].site
+            combined_op = Op(ops[i].mat * ops[i+1].mat, ops[i].site)
+            new_ops = (ops[1:i-1]..., combined_op, ops[i+2:end]...)
+            return *(new_ops...)
+        end
+    end
+
+    oc = OpChain(ops...)
+    any(iszero(op) for op in ops) && return zero(oc)
+    return oc
+end
+Base.:*(A::OpChain, B::OpChain) = *(A.ops..., B.ops...)
+Base.:*(A::OpChain, B::Op) = *(A.ops..., B)
+Base.:*(A::Op, B::OpChain) = *(A, B.ops...)
 Base.:*(A::Op, B::Op) = begin
-    A.site == B.site && return Op(A.mat * B.mat, A.site)
-    OpChain(A, B)
+    oc = OpChain(A, B)
+    (iszero(A) || iszero(B)) && return zero(oc)
+    A.site == B.site && return OpChain(Op(A.mat * B.mat, A.site))
+    return oc
 end
 
 # scalar multiplication
@@ -77,6 +92,10 @@ end
 Base.:*(oc::OpChain, s::Number) = s * oc
 
 Base.adjoint(oc::OpChain) = OpChain([adjoint(op) for op in reverse(oc.ops)]...)
+
+Base.one(oc::OpChain) = OpChain(one(first(oc.ops)))
+Base.zero(oc::OpChain) = OpChain(zero(first(oc.ops)))
+Base.iszero(oc::OpChain) = any(iszero(op) for op in oc.ops)
 
 Base.convert(::Type{OpChain{Tid,Tmat}}, oc::OpChain) where {Tid,Tmat} = begin
     converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in oc.ops]

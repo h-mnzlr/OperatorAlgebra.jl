@@ -50,10 +50,9 @@ LinearAlgebra.tr(oc::OpChain, basis) = tr(oc, basis, fill(size(first(oc.ops).mat
 LinearAlgebra.tr(oc::OpChain, basis, dims) = begin
     @warn "tr(::OpChain) is not defined for fermionic operators."
 
-    site_ids = unique(o.site for o in oc.ops)
-    sorted_ops = map(site_ids) do s
+    sorted_ops = map(sites(oc)) do s
         ops_on_site = filter(o -> o.site == s, oc.ops)
-        reduce(*, ops_on_site)
+        length(ops_on_site) == 1 ? only(ops_on_site) : only(reduce(*, ops_on_site).ops)
     end
 
     opsites = [o.site for o in sorted_ops]

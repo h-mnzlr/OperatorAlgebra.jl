@@ -143,9 +143,10 @@ end
         
         result = op1 + op2
         
-        @test result isa Op{Int64, Int64}
-        @test result.mat == [1 1; 1 1]
-        @test result.site == 1
+        @test result isa OpSum{Int64, Int64}
+        @test length(result.ops) == 1
+        @test result.ops[1].mat == [1 1; 1 1]
+        @test result.ops[1].site == 1
     end
     
     @testset "Op + Op (different sites)" begin
@@ -216,6 +217,51 @@ end
         result = op1 + op2
         
         @test result isa OpSum{Int64, Float64}
+    end
+    
+    @testset "Op + Op with zero matrix (different sites)" begin
+        op_zero = Op([0 0; 0 0], 1)
+        op_nonzero = Op([1 2; 3 4], 2)
+        
+        result = op_zero + op_nonzero
+        
+        @test result isa OpSum
+        @test length(result.ops) == 1
+        @test result.ops[1] == op_nonzero
+    end
+    
+    @testset "Op + Op with zero matrix (same site)" begin
+        op_zero = Op([0 0; 0 0], 1)
+        op_nonzero = Op([1 2; 3 4], 1)
+        
+        result = op_zero + op_nonzero
+        
+        @test result isa OpSum
+        @test length(result.ops) == 1
+        @test result.ops[1].mat == [1 2; 3 4]
+        @test result.ops[1].site == 1
+    end
+    
+    @testset "Op + Op with both zero matrices" begin
+        op_zero1 = Op([0 0; 0 0], 1)
+        op_zero2 = Op([0 0; 0 0], 2)
+        
+        result = op_zero1 + op_zero2
+        
+        # When all operators are zero, returns zero of first operator
+        @test iszero(result)
+    end
+    
+    @testset "Multiple additions with zero matrices" begin
+        op1 = Op([1 0; 0 1], 1)
+        op_zero = Op([0 0; 0 0], 2)
+        op3 = Op([1 1; 1 1], 3)
+        
+        result = op1 + op_zero + op3
+        
+        @test result isa OpSum
+        @test length(result.ops) == 2
+        @test !any(iszero, result.ops)
     end
 end
 

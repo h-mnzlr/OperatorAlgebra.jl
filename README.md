@@ -19,6 +19,9 @@ A Julia package for working with quantum operators using an algebraic approach. 
 - **Linear Algebra Operations**: Trace calculations for operators on tensor product spaces
 - **ITensor Integration**: Automatic conversion to Matrix Product Operators (MPOs) when ITensorMPS.jl is loaded
 
+## Important Notice
+This is a project in development. Although the project features an extensive test suite and the project is being developed with high scientific rigour, benchmarking your own code is always of paramount importance. Please report any issues you encounter on the [GitHub issue tracker](https://github.com/h-mnzlr/OperatorAlgebra.jl/issues).
+
 ## Installation
 
 The package is available through the Julia package manager. You can directly install it from the Julia REPL:

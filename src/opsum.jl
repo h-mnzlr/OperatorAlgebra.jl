@@ -57,13 +57,27 @@ struct OpSum{Tid,Tmat} <: AbstractOp{Tid,Tmat}
 end
 
 # rules for addition
-Base.:+(A::AbstractOp, B::AbstractOp) = OpSum(A, B)
-Base.:+(A::OpSum, B::OpSum) = OpSum(A.ops..., B.ops...)
-Base.:+(A::OpSum, B::AbstractOp) = OpSum(A.ops..., B)
-Base.:+(A::AbstractOp, B::OpSum) = OpSum(A, B.ops...)
-Base.:+(A::Op, B::Op) = begin
-    A.site == B.site && return Op(A.mat + B.mat, A.site)
-    OpSum(A, B)
+Base.:+(ops::Vararg{AbstractOp}) = begin
+    filtered = filter(!iszero, ops)
+    isempty(filtered) && return zero(first(ops)) 
+
+    flatted_ops = collect(Iterators.flatten(map(o -> isa(o, OpSum) ? o.ops : [o], filtered)))
+
+    simple_os = +(filter(o -> isa(o, Op), flatted_ops)...)
+    other_ops = filter(o -> !isa(o, Op), flatted_ops)
+    OpSum(other_ops..., simple_os.ops...) 
+end
+Base.:+(ops::Vararg{Op}) = begin
+    filtered = filter(!iszero, ops)
+    usites = vcat(sites.(filtered)...) |> unique
+
+    site_ops = map(usites) do s
+        ops_on_site = filter(o -> o.site == s, filtered)
+        length(ops_on_site) == 1 && return only(ops_on_site)
+
+        Op(sum(o -> o.mat, ops_on_site), s)
+    end
+    OpSum(site_ops...)
 end
 
 # scalar multiplication
@@ -76,6 +90,10 @@ Base.:*(o::AbstractOp, A::OpSum) = OpSum([o * op for op in A.ops]...)
 Base.:*(A::OpSum, B::OpSum) = OpSum([ol * or for (ol, or) in Iterators.product(A.ops, B.ops)]...)
 
 Base.adjoint(os::OpSum) = OpSum([adjoint(op) for op in os.ops]...)
+
+Base.one(os::OpSum) = OpSum(one(first(os.ops)))
+Base.zero(os::OpSum) = OpSum(zero(first(os.ops)))
+Base.iszero(os::OpSum) = all(iszero(op) for op in os.ops)
 
 Base.convert(::Type{OpSum{Tid,Tmat}}, os::OpSum) where {Tid,Tmat} = begin
     converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in os.ops]

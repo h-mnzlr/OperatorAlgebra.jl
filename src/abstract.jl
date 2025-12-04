@@ -16,9 +16,6 @@ See also: [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref)
 """
 abstract type AbstractOp{Tid,Tmat} end
 
-Base.one(op::AbstractOp) = Op(LinearAlgebra.I(size(op.mat, 1)), op.site)
-Base.zero(op::AbstractOp) = Op(zeros(size(op.mat)), op.site)
-
 """
     eltype(op::AbstractOp)
 
@@ -49,3 +46,6 @@ sites(::AbstractOp) = error("sites function not implemented for $(typeof(op))")
 
 _sort_if_sortable!(vs::Vector{T}) where {T} = _is_sortable(T) ? sort!(vs) : vs 
 _is_sortable(T) = hasmethod(isless, Tuple{T,T})
+
+# Default iszero implementation
+Base.iszero(op::AbstractOp) = false
