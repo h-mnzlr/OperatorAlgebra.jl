@@ -1,7 +1,7 @@
 name = "OperatorAlgebra"
 uuid = "49087e99-997d-48ed-8945-d57b707c274b"
 authors = ["h-mnzlr <67161416+h-mnzlr@users.noreply.github.com>"]
-version = "0.2.4"
+version = "0.2.5"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

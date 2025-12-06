@@ -62,10 +62,7 @@ Base.:+(ops::Vararg{AbstractOp}) = begin
     isempty(filtered) && return zero(first(ops)) 
 
     flatted_ops = collect(Iterators.flatten(map(o -> isa(o, OpSum) ? o.ops : [o], filtered)))
-
-    simple_os = +(filter(o -> isa(o, Op), flatted_ops)...)
-    other_ops = filter(o -> !isa(o, Op), flatted_ops)
-    OpSum(other_ops..., simple_os.ops...) 
+    OpSum(flatted_ops...)
 end
 Base.:+(ops::Vararg{Op}) = begin
     filtered = filter(!iszero, ops)
