@@ -45,9 +45,9 @@ _to_itensor_op(os::OperatorAlgebra.OpSum) = begin
     itso_os
 end
 
-ITensorMPS.MPO(o::OperatorAlgebra.AbstractOp, sites) = begin
+ITensorMPS.MPO(o::OperatorAlgebra.AbstractOp, sites; kwargs...) = begin
     itso_os = ITensorMPS.OpSum() + _to_itensor_op(o)
-    MPO(itso_os, sites)
+    MPO(itso_os, sites; kwargs...)
 end
 
 end # module
