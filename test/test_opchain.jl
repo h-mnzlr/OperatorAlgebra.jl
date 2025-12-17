@@ -443,10 +443,10 @@ end
         result = 3 * opchain
         
         @test length(result.ops) == 2
-        # Order is preserved (not sorted by site)
+        # Scalar is applied to first operator only (s*A)*B = s*(A*B)
         @test result.ops[1].mat == [3 0; 0 3]
         @test result.ops[1].site == 1
-        @test result.ops[2].mat == [0 3; 3 0]
+        @test result.ops[2].mat == [0 1; 1 0]
         @test result.ops[2].site == 2
     end
     
@@ -460,7 +460,7 @@ end
         @test length(result.ops) == 2
         @test result.ops[1].mat == [3 0; 0 3]
         @test result.ops[1].site == 1
-        @test result.ops[2].mat == [0 3; 3 0]
+        @test result.ops[2].mat == [0 1; 1 0]
         @test result.ops[2].site == 2
     end
     
@@ -472,7 +472,7 @@ end
         result = 2.5 * opchain
         
         @test result.ops[1].mat ≈ [2.5 0.0; 0.0 2.5]
-        @test result.ops[2].mat ≈ [0.0 2.5; 2.5 0.0]
+        @test result.ops[2].mat ≈ [0.0 1.0; 1.0 0.0]
     end
     
     @testset "Complex scalar * OpChain" begin
@@ -492,7 +492,7 @@ end
         result = 0 * opchain
         
         @test result.ops[1].mat == [0 0; 0 0]
-        @test result.ops[2].mat == [0 0; 0 0]
+        @test result.ops[2].mat == [5 6; 7 8]
     end
     
     @testset "Negative scalar * OpChain" begin

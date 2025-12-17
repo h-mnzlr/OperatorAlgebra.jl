@@ -80,14 +80,7 @@ end
 
 # scalar multiplication
 Base.:*(s::Number, oc::OpChain) = begin
-    seen_sites = Set{sitetype(oc)}()
-    ops = map(oc.ops) do op
-        op.site in seen_sites && return op
-
-        push!(seen_sites, op.site)
-        op * s
-    end
-    OpChain(ops...)
+    OpChain(s * oc.ops[1], oc.ops[2:end]...)
 end
 Base.:*(oc::OpChain, s::Number) = s * oc
 
