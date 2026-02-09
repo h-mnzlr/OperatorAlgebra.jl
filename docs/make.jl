@@ -8,7 +8,6 @@ makedocs(
         prettyurls = get(ENV, "CI", nothing) == "true",
         canonical = "https://h-mnzlr.github.io/OperatorAlgebra.jl",
         assets = String[],
-        repolink = "https://github.com/h-mnzlr/OperatorAlgebra.jl",
     ),
     pages = [
         "Home" => "index.md",
@@ -25,7 +24,7 @@ makedocs(
         ],
     ],
     checkdocs = :exports,
-    repo = "github.com/h-mnzlr/OperatorAlgebra.jl",
+    repo = Remotes.GitHub("h-mnzlr", "OperatorAlgebra.jl"),
     warnonly = [:missing_docs, :cross_references],
 )
 
