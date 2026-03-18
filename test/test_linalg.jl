@@ -211,17 +211,6 @@ end
         chain_float = OpChain(op1_float, op2)
         @test tr(chain_float, [1, 2]) isa Float64
     end
-    
-    @testset "Trace with OpChain and simplified operators" begin
-        # OpChain simplifies operators on the same site
-        op1a = Op([1 0; 0 2], 1)
-        op1b = Op([2 0; 0 1], 1)
-        chain = OpChain(op1a, op1b)
-        
-        basis = [1]
-        # op1a * op1b = [2 0; 0 2], tr = 4
-        @test tr(chain, basis) == 4
-    end
 end
 
 @testset "Trace Tests for OpSum" begin

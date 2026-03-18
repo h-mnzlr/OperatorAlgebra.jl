@@ -57,25 +57,7 @@ struct OpSum{Tid,Tmat} <: AbstractOp{Tid,Tmat}
 end
 
 # rules for addition
-Base.:+(ops::Vararg{AbstractOp}) = begin
-    filtered = filter(!iszero, ops)
-    isempty(filtered) && return zero(first(ops)) 
-
-    flatted_ops = collect(Iterators.flatten(map(o -> isa(o, OpSum) ? o.ops : [o], filtered)))
-    OpSum(flatted_ops...)
-end
-Base.:+(ops::Vararg{Op}) = begin
-    filtered = filter(!iszero, ops)
-    usites = vcat(sites.(filtered)...) |> unique
-
-    site_ops = map(usites) do s
-        ops_on_site = filter(o -> o.site == s, filtered)
-        length(ops_on_site) == 1 && return only(ops_on_site)
-
-        Op(sum(o -> o.mat, ops_on_site), s)
-    end
-    OpSum(site_ops...)
-end
+Base.:+(ops::Vararg{AbstractOp}) = OpSum(ops...)
 
 # scalar multiplication
 Base.:*(s::Number, A::OpSum) = OpSum([s * op for op in A.ops]...)

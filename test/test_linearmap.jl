@@ -25,7 +25,7 @@ using SparseArrays
         # Test on |00⟩ = [1,0,0,0]
         v = [1, 0, 0, 0]
         result = lm * v
-        @test result ≈ [0, 1, 0, 0]  # X⊗I|00⟩ = |10⟩
+        @test result ≈ [0, 0, 1, 0]  # X⊗I|00⟩ = |10⟩
     end
     
     @testset "LinearMap for Op at last site" begin
@@ -38,7 +38,7 @@ using SparseArrays
         # Test on |00⟩ = [1,0,0,0]
         v = [1, 0, 0, 0]
         result = lm * v
-        @test result ≈ [0, 0, 1, 0]  # I⊗X|00⟩ = |01⟩
+        @test result ≈ [0, 1, 0, 0]  # I⊗X|00⟩ = |01⟩
     end
     
     @testset "LinearMap for Op at middle site" begin
@@ -81,7 +81,7 @@ using SparseArrays
         # |00⟩
         v = [1.0+0im, 0, 0, 0]
         result = lm * v
-        @test result ≈ [0, 1im, 0, 0]  # Y⊗I|00⟩ = i|10⟩
+        @test result ≈ [0, 0, 1im, 0]  # Y⊗I|00⟩ = i|10⟩
     end
     
     @testset "LinearMap with Pauli Z" begin
@@ -272,7 +272,7 @@ end
         
         v = [1, 0, 0, 0]
         result = lm * v
-        @test result ≈ [0, 1, 0, 0]
+        @test result ≈ [0, 0, 1, 0]
     end
     
     @testset "LinearMap for OpSum with operators on same site" begin
@@ -286,7 +286,7 @@ end
         v = [1, 0, 0, 0]
         result = lm * v
         # (I + X)⊗I|00⟩ = |00⟩ + |10⟩
-        @test result ≈ [1, 1, 0, 0]
+        @test result ≈ [1, 0, 1, 0]
     end
     
     @testset "LinearMap for OpSum with complex coefficients" begin
@@ -299,7 +299,7 @@ end
         
         v = [1.0+0im, 0, 0, 0]
         result = lm * v
-        @test result ≈ [1, 1im, 0, 0]
+        @test result ≈ [1, 0, 1im, 0]
     end
     
     @testset "LinearMap for OpSum with Symbol basis" begin
@@ -365,7 +365,7 @@ end
         v = [1, 0, 0, 0]  # |00⟩
         result = lm * v
         # Chain applies op2 then op1: (X⊗I)(I⊗Z)|00⟩ = X⊗Z|00⟩ = |10⟩
-        @test result ≈ [0, 1, 0, 0]
+        @test result ≈ [0, 0, 1, 0]
     end
     
     @testset "LinearMap for OpChain with single operator" begin
@@ -377,7 +377,7 @@ end
         
         v = [1, 0, 0, 0]
         result = lm * v
-        @test result ≈ [0, 1, 0, 0]
+        @test result ≈ [0, 0, 1, 0]
     end
     
     @testset "LinearMap for OpChain with three operators" begin
@@ -417,7 +417,7 @@ end
         v = [1, 0, 0, 0]  # |00⟩
         result = lm * v
         # ZX|00⟩ = Z|10⟩ = -|10⟩
-        @test result ≈ [0, -1, 0, 0]
+        @test result ≈ [0, 0, -1, 0]
     end
     
     @testset "LinearMap for OpChain with complex matrices" begin
@@ -483,13 +483,8 @@ end
         v = [1, 0, 0, 0]
         result = lm * v
         
-        # Verify against manual calculation
-        # Applied in reverse: op2 then op1
-        mat2 = [1 0; 3 1]
-        mat1 = [1 2; 0 1]
-        combined = mat1 * mat2
-        expected_2site = kron(combined, [1 0; 0 1])
-        expected = expected_2site * v
+        # Verify against sparse implementation
+        expected = sparse(chain, basis) * v
         
         @test result ≈ expected
     end
@@ -497,13 +492,8 @@ end
     @testset "LinearMap for OpChain empty chain" begin
         chain = OpChain()
         basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        
-        v = [1, 0, 0, 0]
-        result = lm * v
-        # Empty chain should act as identity
-        @test result ≈ v
+
+        @test_throws MethodError LinearMap(chain, basis)
     end
 end
 

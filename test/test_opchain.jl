@@ -137,6 +137,9 @@ using LinearAlgebra
 end
 
 @testset "OpChain Multiplication Tests" begin
+    factor_count(op::Op) = 1
+    factor_count(oc::OpChain) = sum(factor_count, oc.ops)
+
     @testset "Op * Op (same site)" begin
         op1 = Op([1 2; 3 4], 1)
         op2 = Op([5 6; 7 8], 1)
@@ -144,9 +147,11 @@ end
         result = op1 * op2
         
         @test result isa OpChain{Int64, Int64}
-        @test length(result.ops) == 1
-        @test result.ops[1].mat == [19 22; 43 50]
+        @test length(result.ops) == 2
+        @test result.ops[1].mat == [1 2; 3 4]
         @test result.ops[1].site == 1
+        @test result.ops[2].mat == [5 6; 7 8]
+        @test result.ops[2].site == 1
     end
     
     @testset "Op * Op (different sites)" begin
@@ -167,8 +172,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 2
+        @test factor_count(result) == 2
     end
     
     @testset "Op * Op with zero matrix (right)" begin
@@ -179,8 +184,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 2
+        @test factor_count(result) == 2
     end
     
     @testset "Op * Op with both zero matrices" begin
@@ -191,8 +196,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 2
+        @test factor_count(result) == 2
     end
     
     @testset "Op * Op with zero matrix (same site)" begin
@@ -203,9 +208,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
-        @test result.ops[1].site == 1
+        @test length(result.ops) == 2
+        @test factor_count(result) == 2
     end
     
     @testset "OpChain * OpChain (all different sites)" begin
@@ -220,17 +224,17 @@ end
         result = chain1 * chain2
         
         @test result isa OpChain
-        @test length(result.ops) == 4
-        @test result.ops[1].site == 1
-        @test result.ops[2].site == 2
-        @test result.ops[3].site == 3
-        @test result.ops[4].site == 4
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpChain
+        @test result.ops[2] isa OpChain
+        @test factor_count(result) == 4
+        @test Set(sites(result)) == Set([1, 2, 3, 4])
     end
     
     @testset "OpChain * OpChain with site overlap (no simplification)" begin
         # chain1: sites 1, 2
         # chain2: sites 2, 3
-        # result should have all 4 operators (no automatic simplification)
+        # result keeps chain structure (no flattening/simplification)
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
         op3 = Op([1 1; 1 1], 3)
@@ -242,13 +246,11 @@ end
         result = chain1 * chain2
         
         @test result isa OpChain
-        @test length(result.ops) == 4  # All operators preserved, no simplification
-        
-        # Verify all operators are present
-        @test result.ops[1].site == 1
-        @test result.ops[2].site == 2
-        @test result.ops[3].site == 3  # Second site 2 operator
-        @test result.ops[4].site == 2
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpChain
+        @test result.ops[2] isa OpChain
+        @test factor_count(result) == 4
+        @test Set(sites(result)) == Set([1, 2, 3])
     end
     
     @testset "OpChain * Op on new site" begin
@@ -260,8 +262,11 @@ end
         result = opchain * op3
         
         @test result isa OpChain
-        @test length(result.ops) == 3
-        @test any(op -> op.site == 3, result.ops)
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpChain
+        @test result.ops[2] isa Op
+        @test factor_count(result) == 3
+        @test 3 in sites(result)
     end
     
     @testset "OpChain * Op with zero matrix" begin
@@ -274,9 +279,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
-        @test result.ops[1].site == 1  # Returns zero of first op in chain
+        @test length(result.ops) == 2
+        @test factor_count(result) == 3
     end
     
     @testset "OpChain * Op on existing site (no simplification)" begin
@@ -288,12 +292,9 @@ end
         result = opchain * op3
         
         @test result isa OpChain
-        @test length(result.ops) == 3  # All operators preserved
-        
-        @test result.ops[1].site == 1
-        @test result.ops[2].site == 2
-        @test result.ops[3].site == 1  # Second site 2 operator
-        @test result.ops[3].mat == [2 0; 0 2]
+        @test length(result.ops) == 2
+        @test factor_count(result) == 3
+        @test Set(sites(result)) == Set([1, 2])
     end
     
     @testset "Op * OpChain on new site" begin
@@ -305,8 +306,11 @@ end
         result = op1 * opchain
         
         @test result isa OpChain
-        @test length(result.ops) == 3
-        @test any(op -> op.site == 1, result.ops)
+        @test length(result.ops) == 2
+        @test result.ops[1] isa Op
+        @test result.ops[2] isa OpChain
+        @test factor_count(result) == 3
+        @test 1 in sites(result)
     end
     
     @testset "Op * OpChain with zero matrix" begin
@@ -319,8 +323,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 2
+        @test factor_count(result) == 3
     end
     
     @testset "Op * OpChain on existing site (no simplification)" begin
@@ -332,13 +336,9 @@ end
         result = op1 * opchain
         
         @test result isa OpChain
-        @test length(result.ops) == 3  # All operators preserved
-        
-        @test result.ops[1].site == 1
-        @test result.ops[2].site == 2  # Second site 1 operator
-        @test result.ops[3].site == 1
-        @test result.ops[1].mat == [2 0; 0 2]
-        @test result.ops[2].mat == [1 0; 0 1]
+        @test length(result.ops) == 2
+        @test factor_count(result) == 3
+        @test Set(sites(result)) == Set([1, 2])
     end
     
     @testset "Multiple multiplications create OpChain (no simplification)" begin
@@ -350,13 +350,9 @@ end
         result = op1 * op2 * op3 * op4
         
         @test result isa OpChain
-        # All 4 operators preserved (no simplification)
         @test length(result.ops) == 4
-        
-        @test result.ops[1].site == 1
-        @test result.ops[2].site == 2
-        @test result.ops[3].site == 1  # Second site 1 operator
-        @test result.ops[4].site == 3
+        @test factor_count(result) == 4
+        @test Set(sites(result)) == Set([1, 2, 3])
     end
     
     @testset "Multiple multiplications with zero matrix (early)" begin
@@ -368,8 +364,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 3
+        @test factor_count(result) == 3
     end
     
     @testset "Multiple multiplications with zero matrix (late)" begin
@@ -381,8 +377,8 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 3
+        @test factor_count(result) == 3
     end
     
     @testset "Op * Op with Float zero matrix" begin
@@ -394,8 +390,8 @@ end
         @test result isa OpChain
         @test iszero(result)
         @test eltype(result) == Float64
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 2
+        @test factor_count(result) == 2
     end
     
     @testset "Op * Op with Complex zero matrix" begin
@@ -407,8 +403,8 @@ end
         @test result isa OpChain
         @test iszero(result)
         @test eltype(result) == ComplexF64
-        @test length(result.ops) == 1
-        @test iszero(result.ops[1])
+        @test length(result.ops) == 2
+        @test factor_count(result) == 2
     end
     
     @testset "Multiplication with type promotion (Float)" begin
@@ -428,9 +424,8 @@ end
         result1 = (op1 * op2) * op3
         result2 = op1 * (op2 * op3)
         
-        @test length(result1.ops) == length(result2.ops)
-        # All on different sites, so should have same site IDs
-        @test Set([op.site for op in result1.ops]) == Set([op.site for op in result2.ops])
+        @test factor_count(result1) == factor_count(result2)
+        @test Set(sites(result1)) == Set(sites(result2))
     end
 end
 

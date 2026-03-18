@@ -497,9 +497,9 @@ end
     
     σx_full = kron(PAULI_X, I(2), I(2))
     σz_full = kron(PAULI_Z, I(2), I(2))
-    expected = σx_full * σz_full
+    expected = σz_full * σx_full
     @test M == expected
-    @test M == kron(PAULI_X * PAULI_Z, I(2), I(2))  # Should equal σx*σx on site 1
+    @test M == kron(PAULI_Z * PAULI_X, I(2), I(2))
 end
 
 @testset "atsite - OpChain with Test State" begin

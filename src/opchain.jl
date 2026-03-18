@@ -43,9 +43,9 @@ chain' == σz' * σy' * σx'  # true
 See also: [`Op`](@ref), [`OpSum`](@ref), [`apply`](@ref), `sparse`
 """
 struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
-    ops::Vector{<:Op{Tid,Tmat}}
+    ops::Vector{<:AbstractOp{Tid,Tmat}}
 
-    function OpChain(ops::Vararg{Op})
+    function OpChain(ops::Vararg{AbstractOp})
         Tid = promote_type(map(o -> sitetype(o), ops)...)
         Tmat = promote_type(map(o -> eltype(o), ops)...)
 
@@ -54,29 +54,7 @@ struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     end
 end
 
-Base.:*(ops::Vararg{Op}) = begin
-    # combine consecutive operators on same site
-    for i in 1:length(ops)-1
-        if ops[i].site == ops[i+1].site
-            combined_op = Op(ops[i].mat * ops[i+1].mat, ops[i].site)
-            new_ops = (ops[1:i-1]..., combined_op, ops[i+2:end]...)
-            return *(new_ops...)
-        end
-    end
-
-    oc = OpChain(ops...)
-    any(iszero(op) for op in ops) && return zero(oc)
-    return oc
-end
-Base.:*(A::OpChain, B::OpChain) = *(A.ops..., B.ops...)
-Base.:*(A::OpChain, B::Op) = *(A.ops..., B)
-Base.:*(A::Op, B::OpChain) = *(A, B.ops...)
-Base.:*(A::Op, B::Op) = begin
-    oc = OpChain(A, B)
-    (iszero(A) || iszero(B)) && return zero(oc)
-    A.site == B.site && return OpChain(Op(A.mat * B.mat, A.site))
-    return oc
-end
+Base.:*(ops::Vararg{AbstractOp}) = OpChain(ops...)
 
 # scalar multiplication
 Base.:*(s::Number, oc::OpChain) = begin

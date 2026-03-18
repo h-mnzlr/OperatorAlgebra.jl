@@ -144,9 +144,11 @@ end
         result = op1 + op2
         
         @test result isa OpSum{Int64, Int64}
-        @test length(result.ops) == 1
-        @test result.ops[1].mat == [1 1; 1 1]
-        @test result.ops[1].site == 1
+        @test length(result.ops) == 2
+        @test result.ops[1].mat == op1.mat
+        @test result.ops[1].site == op1.site
+        @test result.ops[2].mat == op2.mat
+        @test result.ops[2].site == op2.site
     end
     
     @testset "Op + Op (different sites)" begin
@@ -171,7 +173,9 @@ end
         result = sum1 + sum2
         
         @test result isa OpSum
-        @test length(result.ops) == 4
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpSum
+        @test result.ops[2] isa OpSum
     end
     
     @testset "OpSum + Op" begin
@@ -183,7 +187,9 @@ end
         result = opsum + op3
         
         @test result isa OpSum
-        @test length(result.ops) == 3
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpSum
+        @test result.ops[2] isa Op
     end
     
     @testset "Op + OpSum" begin
@@ -195,7 +201,9 @@ end
         result = op1 + opsum
         
         @test result isa OpSum
-        @test length(result.ops) == 3
+        @test length(result.ops) == 2
+        @test result.ops[1] isa Op
+        @test result.ops[2] isa OpSum
     end
     
     @testset "Multiple additions create OpSum" begin
@@ -226,8 +234,9 @@ end
         result = op_zero + op_nonzero
         
         @test result isa OpSum
-        @test length(result.ops) == 1
-        @test result.ops[1] == op_nonzero
+        @test length(result.ops) == 2
+        @test result.ops[1] == op_zero
+        @test result.ops[2] == op_nonzero
     end
     
     @testset "Op + Op with zero matrix (same site)" begin
@@ -237,9 +246,9 @@ end
         result = op_zero + op_nonzero
         
         @test result isa OpSum
-        @test length(result.ops) == 1
-        @test result.ops[1].mat == [1 2; 3 4]
-        @test result.ops[1].site == 1
+        @test length(result.ops) == 2
+        @test result.ops[1] == op_zero
+        @test result.ops[2] == op_nonzero
     end
     
     @testset "Op + Op with both zero matrices" begin
@@ -260,8 +269,8 @@ end
         result = op1 + op_zero + op3
         
         @test result isa OpSum
-        @test length(result.ops) == 2
-        @test !any(iszero, result.ops)
+        @test length(result.ops) == 3
+        @test !iszero(result)
     end
 end
 
