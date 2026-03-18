@@ -1,4 +1,8 @@
-import LinearAlgebra: tr
+import LinearAlgebra: tr, diag
+
+LinearAlgebra.diag(o::Op) = Op(diagm(diag(o.mat)), o.site)
+LinearAlgebra.diag(oc::OpChain) = prod(diag(o) for o in oc.ops)
+LinearAlgebra.diag(os::OpSum) = sum(diag(o) for o in os.ops)
 
 """
     tr(o::Op, basis, [dims])
