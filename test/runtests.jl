@@ -28,6 +28,9 @@ using OperatorAlgebra
 
     @info "Testing Array/Matrix conversions..."
     include("test_array.jl")
+
+    @info "Testing simplify()..."
+    include("test_simplify.jl")
     
     @info "Testing apply operations..."
     include("test_apply.jl")

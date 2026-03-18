@@ -57,3 +57,11 @@ Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} =
 Base.show(io::IO, op::Op) = print(io, "Op(site=$(op.site), mat=$(op.mat))")
 
 sites(op::Op) = [op.site]
+
+commutator(o1::Op, o2::Op) = begin
+    if o1.site == o2.site
+        return Op(commutator(o1.mat, o2.mat), o1.site)
+    else
+        return commutator(OpChain(o1, o2), OpChain(o2, o1))
+    end
+end

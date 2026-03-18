@@ -49,3 +49,18 @@ _is_sortable(T) = hasmethod(isless, Tuple{T,T})
 
 # Default iszero implementation
 Base.iszero(op::AbstractOp) = false
+
+"""
+    normal_order(op::AbstractOp)
+
+Return a normal-ordered version of the operator. In particular this means, that if sites are given by a sortable type,
+the operators are sorted by their site identifiers.
+"""
+normal_order(op::AbstractOp) = op  # Default: no normal ordering defined
+
+"""
+    commutator(o1, o2)
+
+Return the commutator of two operators.
+"""
+commutator(o1, o2) = o1 * o2 - o2 * o1
