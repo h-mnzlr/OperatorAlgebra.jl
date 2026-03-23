@@ -61,6 +61,7 @@ export AbstractOp, Op, OpChain, OpSum
 export ⊗, kronpow, atsite
 export sites
 export simplify
+export normal_order
 
 export PAULI_X, PAULI_Y, PAULI_Z, SPIN_X, SPIN_Y, SPIN_Z, I2, RAISE, LOWER, OCC_PART, OCC_HOLE
 export apply, apply!

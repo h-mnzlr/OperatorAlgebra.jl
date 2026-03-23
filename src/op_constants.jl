@@ -35,7 +35,7 @@ Sparse occupation number operator for particles: [[1, 0], [0, 0]]
 
 Projects onto the occupied state |1⟩.
 """
-const OCC_PART = [1 0; 0 0]
+const OCC_PART = [0 0; 0 1]
 
 """
     OCC_HOLE
@@ -44,7 +44,7 @@ Sparse occupation number operator for holes: [[0, 0], [0, 1]]
 
 Projects onto the empty state |0⟩.
 """
-const OCC_HOLE = [0 0; 0 1]
+const OCC_HOLE = [1 0; 0 0]
 
 """
     RAISE
@@ -53,7 +53,7 @@ Sparse raising (creation) operator: [[0, 1], [0, 0]]
 
 Maps |0⟩ → |1⟩, |1⟩ → 0. Also called σ₊ or a†.
 """
-const RAISE = [0 1; 0 0]
+const RAISE = [0 0; 1 0]
 
 """
     LOWER
@@ -62,4 +62,4 @@ Sparse lowering (annihilation) operator: [[0, 0], [1, 0]]
 
 Maps |1⟩ → |0⟩, |0⟩ → 0. Also called σ₋ or a.
 """
-const LOWER = [0 0; 1 0]
+const LOWER = [0 1; 0 0]
