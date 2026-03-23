@@ -79,5 +79,6 @@ include("sparse.jl")
 include("apply.jl")
 include("linearmap.jl")
 include("simplify.jl")
+include("latexify.jl")
 
 end # module OperatorAlgebra

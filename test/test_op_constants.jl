@@ -192,32 +192,32 @@ end
     
     @testset "PAULI_Y from ladder operators" begin
         # σy = -i(RAISE - LOWER)
-        @test PAULI_Y ≈ -im * (RAISE - LOWER)
+        @test PAULI_Y ≈ -im * (LOWER - RAISE)
     end
     
     @testset "PAULI_Z from occupation operators" begin
-        # σz = OCC_PART - OCC_HOLE
-        @test PAULI_Z == OCC_PART - OCC_HOLE
+        # σz = OCC_HOLE - OCC_PART
+        @test PAULI_Z == OCC_HOLE - OCC_PART
     end
     
     @testset "RAISE from Pauli matrices" begin
-        # RAISE = (σx + i σy) / 2
-        @test RAISE ≈ (PAULI_X + im * PAULI_Y) / 2
+        # RAISE = (σx - i σy) / 2
+        @test RAISE ≈ (PAULI_X - im * PAULI_Y) / 2
     end
     
     @testset "LOWER from Pauli matrices" begin
-        # LOWER = (σx - i σy) / 2
-        @test LOWER ≈ (PAULI_X - im * PAULI_Y) / 2
+        # LOWER = (σx + i σy) / 2
+        @test LOWER ≈ (PAULI_X + im * PAULI_Y) / 2
     end
     
     @testset "OCC_PART from Pauli Z" begin
-        # OCC_PART = (I + σz) / 2
-        @test OCC_PART ≈ (I(2) + PAULI_Z) / 2
+        # OCC_PART = (I - σz) / 2
+        @test OCC_PART ≈ (I(2) - PAULI_Z) / 2
     end
     
     @testset "OCC_HOLE from Pauli Z" begin
-        # OCC_HOLE = (I - σz) / 2
-        @test OCC_HOLE ≈ (I(2) - PAULI_Z) / 2
+        # OCC_HOLE = (I + σz) / 2
+        @test OCC_HOLE ≈ (I(2) + PAULI_Z) / 2
     end
 end
 
