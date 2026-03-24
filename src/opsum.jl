@@ -58,15 +58,24 @@ end
 
 # rules for addition
 Base.:+(ops::Vararg{AbstractOp}) = OpSum(ops...)
+Base.:+(os::OpSum, o::AbstractOp) = OpSum(os.ops..., o)
+Base.:+(o::AbstractOp, os::OpSum) = OpSum(o, os.ops...)
+Base.:+(os1::OpSum, os2::OpSum) = OpSum(os1.ops..., os2.ops...)
 
 # scalar multiplication
 Base.:*(s::Number, A::OpSum) = OpSum([s * op for op in A.ops]...)
 Base.:*(A::OpSum, s::Number) = OpSum([op * s for op in A.ops]...)
 
-# chaining with an opsum operator gives an opsum again
-Base.:*(A::OpSum, o::AbstractOp) = OpSum([op * o for op in A.ops]...)
-Base.:*(o::AbstractOp, A::OpSum) = OpSum([o * op for op in A.ops]...)
-Base.:*(A::OpSum, B::OpSum) = OpSum([ol * or for (ol, or) in Iterators.product(A.ops, B.ops)]...)
+# to allow the user to control operator complexity, do not expand products of sums
+#Base.:*(A::OpSum, o::AbstractOp) = OpSum([op * o for op in A.ops]...)
+#Base.:*(o::AbstractOp, A::OpSum) = OpSum([o * op for op in A.ops]...)
+
+# simple operator multiplication do not increase complexity of the sum (no cross terms)
+Base.:*(A::OpSum, o::Op) = OpSum([op * o for op in A.ops]...)
+Base.:*(o::Op, A::OpSum) = OpSum([o * op for op in A.ops]...)
+
+# chaining with an opsum operator gives an opsum again, also removed for now
+#Base.:*(A::OpSum, B::OpSum) = OpSum([ol * or for (ol, or) in Iterators.product(A.ops, B.ops)]...)
 
 Base.adjoint(os::OpSum) = OpSum([adjoint(op) for op in os.ops]...)
 

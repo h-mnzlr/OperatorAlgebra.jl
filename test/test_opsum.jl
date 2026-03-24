@@ -23,6 +23,17 @@ using LinearAlgebra
         @test opsum isa OpSum{Int64, Int64}
     end
     
+    @testset "Base.one and Base.zero" begin
+        some_op = Op([1 2; 3 4], 1)
+        id_op = one(some_op)
+        @test id_op.mat == Matrix(I, size(some_op.mat, 1), size(some_op.mat, 2))
+        @test id_op.site == some_op.site
+
+        zero_op = zero(some_op)
+        @test zero_op.mat == zeros(size(some_op.mat))
+        @test zero_op.site == some_op.site
+    end
+    
     @testset "Constructor with three operators" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
@@ -173,9 +184,8 @@ end
         result = sum1 + sum2
         
         @test result isa OpSum
-        @test length(result.ops) == 2
-        @test result.ops[1] isa OpSum
-        @test result.ops[2] isa OpSum
+        @test length(result.ops) == 4
+        @test all(op -> op isa Op, result.ops)
     end
     
     @testset "OpSum + Op" begin
@@ -187,9 +197,8 @@ end
         result = opsum + op3
         
         @test result isa OpSum
-        @test length(result.ops) == 2
-        @test result.ops[1] isa OpSum
-        @test result.ops[2] isa Op
+        @test length(result.ops) == 3
+        @test all(op -> op isa Op, result.ops)
     end
     
     @testset "Op + OpSum" begin
@@ -201,9 +210,8 @@ end
         result = op1 + opsum
         
         @test result isa OpSum
-        @test length(result.ops) == 2
-        @test result.ops[1] isa Op
-        @test result.ops[2] isa OpSum
+        @test length(result.ops) == 3
+        @test all(op -> op isa Op, result.ops)
     end
     
     @testset "Multiple additions create OpSum" begin
@@ -352,8 +360,8 @@ end
         @test result.ops[2] isa OpChain
     end
     
-    @testset "OpSum * OpSum (2x2 expansion)" begin
-        # (A + B) * (C + D) = AC + AD + BC + BD
+    @testset "OpSum * OpSum (2x2 stays symbolic)" begin
+        # (A + B) * (C + D) is intentionally kept symbolic as a chain
         opA = Op([1 0; 0 1], 1)
         opB = Op([0 1; 1 0], 2)
         opC = Op([1 1; 1 1], 3)
@@ -364,18 +372,14 @@ end
         
         result = sum1 * sum2
         
-        @test result isa OpSum
-        # Should have 2 * 2 = 4 terms
-        @test length(result.ops) == 4
-        
-        # Verify all products are OpChains
-        for op in result.ops
-            @test op isa OpChain
-        end
+        @test result isa OpChain
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpSum
+        @test result.ops[2] isa OpSum
     end
     
-    @testset "OpSum * OpSum (3x2 expansion)" begin
-        # (A + B + C) * (D + E) should give 6 terms
+    @testset "OpSum * OpSum (3x2 stays symbolic)" begin
+        # (A + B + C) * (D + E) is intentionally not expanded
         opA = Op([1 0; 0 1], 1)
         opB = Op([0 1; 1 0], 2)
         opC = Op([1 1; 1 1], 3)
@@ -387,13 +391,14 @@ end
         
         result = sum1 * sum2
         
-        @test result isa OpSum
-        # Should have 3 * 2 = 6 terms
-        @test length(result.ops) == 6
+        @test result isa OpChain
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpSum
+        @test result.ops[2] isa OpSum
     end
     
-    @testset "OpSum * OpSum (single term each)" begin
-        # Edge case: (A) * (B) should give single term AB
+    @testset "OpSum * OpSum (single term each stays symbolic)" begin
+        # Edge case: even single-term sums remain as OpSum factors in a chain
         opA = Op([1 0; 0 1], 1)
         opB = Op([0 1; 1 0], 2)
         
@@ -402,13 +407,14 @@ end
         
         result = sum1 * sum2
         
-        @test result isa OpSum
-        @test length(result.ops) == 1
-        @test result.ops[1] isa OpChain
+        @test result isa OpChain
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpSum
+        @test result.ops[2] isa OpSum
     end
     
-    @testset "OpSum * OpSum expansion is complete" begin
-        # Verify that (σx₁ + σy₂) * (σz₃ + σx₄) gives all 4 products
+    @testset "OpSum * OpSum keeps factors intact" begin
+        # Verify that (σx₁ + σy₂) * (σz₃ + σx₄) keeps both sums as chain factors
         σx = [0 1; 1 0]
         σy = [0 -im; im 0]
         σz = [1 0; 0 -1]
@@ -423,18 +429,10 @@ end
         
         result = sum1 * sum2
         
-        @test result isa OpSum
-        @test length(result.ops) == 4
-        
-        # Extract the chains
-        chains = result.ops
-        
-        # Verify we have all 4 combinations
-        # Each chain should have 2 operators
-        for chain in chains
-            @test chain isa OpChain
-            @test length(chain.ops) == 2
-        end
+        @test result isa OpChain
+        @test length(result.ops) == 2
+        @test result.ops[1] isa OpSum
+        @test result.ops[2] isa OpSum
     end
     
     @testset "OpSum * OpSum with type promotion" begin
@@ -448,8 +446,8 @@ end
         
         result = sum1 * sum2
         
-        @test result isa OpSum{Int64, Float64}
-        @test length(result.ops) == 4
+        @test result isa OpChain{Int64, Float64}
+        @test length(result.ops) == 2
     end
     
     @testset "OpSum * OpSum is distributive" begin

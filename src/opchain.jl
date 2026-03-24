@@ -55,6 +55,9 @@ struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
 end
 
 Base.:*(ops::Vararg{AbstractOp}) = OpChain(ops...)
+Base.:*(oc::OpChain, o::Op) = OpChain(oc.ops..., o)
+Base.:*(o::Op, oc::OpChain) = OpChain(o, oc.ops...)
+Base.:*(oc1::OpChain, oc2::OpChain) = OpChain(oc1.ops..., oc2.ops...)
 
 # scalar multiplication
 Base.:*(s::Number, oc::OpChain) = begin

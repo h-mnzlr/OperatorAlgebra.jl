@@ -23,6 +23,11 @@ using LinearAlgebra
         @test opchain isa OpChain{Int64, Int64}
     end
     
+    @testset "Base.one and Base.zero" begin
+        # @test one(OpChain) == OpChain()
+        # @test zero(OpChain) == OpChain(zero(Op))
+    end
+    
     @testset "Constructor with three operators" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
@@ -224,9 +229,8 @@ end
         result = chain1 * chain2
         
         @test result isa OpChain
-        @test length(result.ops) == 2
-        @test result.ops[1] isa OpChain
-        @test result.ops[2] isa OpChain
+        @test length(result.ops) == 4
+        @test all(op -> op isa Op, result.ops)
         @test factor_count(result) == 4
         @test Set(sites(result)) == Set([1, 2, 3, 4])
     end
@@ -234,7 +238,7 @@ end
     @testset "OpChain * OpChain with site overlap (no simplification)" begin
         # chain1: sites 1, 2
         # chain2: sites 2, 3
-        # result keeps chain structure (no flattening/simplification)
+        # result is flattened (still no simplification)
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
         op3 = Op([1 1; 1 1], 3)
@@ -246,9 +250,8 @@ end
         result = chain1 * chain2
         
         @test result isa OpChain
-        @test length(result.ops) == 2
-        @test result.ops[1] isa OpChain
-        @test result.ops[2] isa OpChain
+        @test length(result.ops) == 4
+        @test all(op -> op isa Op, result.ops)
         @test factor_count(result) == 4
         @test Set(sites(result)) == Set([1, 2, 3])
     end
@@ -262,9 +265,8 @@ end
         result = opchain * op3
         
         @test result isa OpChain
-        @test length(result.ops) == 2
-        @test result.ops[1] isa OpChain
-        @test result.ops[2] isa Op
+        @test length(result.ops) == 3
+        @test all(op -> op isa Op, result.ops)
         @test factor_count(result) == 3
         @test 3 in sites(result)
     end
@@ -279,7 +281,7 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 2
+        @test length(result.ops) == 3
         @test factor_count(result) == 3
     end
     
@@ -292,7 +294,7 @@ end
         result = opchain * op3
         
         @test result isa OpChain
-        @test length(result.ops) == 2
+        @test length(result.ops) == 3
         @test factor_count(result) == 3
         @test Set(sites(result)) == Set([1, 2])
     end
@@ -306,9 +308,10 @@ end
         result = op1 * opchain
         
         @test result isa OpChain
-        @test length(result.ops) == 2
+        @test length(result.ops) == 3
         @test result.ops[1] isa Op
-        @test result.ops[2] isa OpChain
+        @test result.ops[2] isa Op
+        @test result.ops[3] isa Op
         @test factor_count(result) == 3
         @test 1 in sites(result)
     end
@@ -323,7 +326,7 @@ end
         
         @test result isa OpChain
         @test iszero(result)
-        @test length(result.ops) == 2
+        @test length(result.ops) == 3
         @test factor_count(result) == 3
     end
     
@@ -336,7 +339,7 @@ end
         result = op1 * opchain
         
         @test result isa OpChain
-        @test length(result.ops) == 2
+        @test length(result.ops) == 3
         @test factor_count(result) == 3
         @test Set(sites(result)) == Set([1, 2])
     end
