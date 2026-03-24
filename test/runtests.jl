@@ -4,6 +4,9 @@ using OperatorAlgebra
 @testset "OperatorAlgebra Tests" begin
     @info "Testing Op constructors and basic operations..."
     include("test_op.jl")
+
+    @info "Testing AbstractOp edge cases..."
+    include("test_abstract.jl")
     
     @info "Testing OpSum operations..."
     include("test_opsum.jl")
@@ -31,6 +34,9 @@ using OperatorAlgebra
 
     @info "Testing simplify()..."
     include("test_simplify.jl")
+
+    @info "Testing normal_order()..."
+    include("test_normal_order.jl")
     
     @info "Testing apply operations..."
     include("test_apply.jl")

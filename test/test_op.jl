@@ -143,6 +143,43 @@ end
     end
 end
 
+@testset "Commutator Tests" begin
+    @testset "Op-Op commutator on same site uses matrix commutator" begin
+        opx = Op([0 1; 1 0], 1)
+        opz = Op([1 0; 0 -1], 1)
+
+        result = commutator(opx, opz)
+
+        @test result isa Op
+        @test result.site == 1
+        @test result.mat == opx.mat * opz.mat - opz.mat * opx.mat
+    end
+
+    @testset "Op-Op commutator on different sites stays symbolic" begin
+        op1 = Op([0 1; 1 0], 1)
+        op2 = Op([1 0; 0 -1], 2)
+
+        result = commutator(op1, op2)
+
+        @test result isa OpSum
+        @test length(result.ops) == 2
+        @test all(term -> term isa OpChain, result.ops)
+        @test all(term -> length(term.ops) == 4, result.ops)
+        @test sites(result) == [1, 2]
+    end
+
+    @testset "Commutator is antisymmetric" begin
+        A = Op([1 2; 3 4], 1)
+        B = Op([0 1; 1 0], 1)
+
+        ab = commutator(A, B)
+        ba = commutator(B, A)
+
+        @test ab.mat == -ba.mat
+        @test ab.site == ba.site
+    end
+end
+
 @testset "Edge Cases" begin
     @testset "1x1 Matrix" begin
         op_scalar = Op([5;;], 0)

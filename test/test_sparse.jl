@@ -260,6 +260,61 @@ end
     end
 end
 
+@testset "Sparse with Inferred Basis (sparse(::AbstractOp))" begin
+    @testset "Op uses sites(op) as basis" begin
+        op = Op([0 1; 1 0], 7)
+
+        inferred = sparse(op)
+        explicit = sparse(op, sites(op))
+
+        @test inferred isa SparseMatrixCSC
+        @test size(inferred) == (2, 2)
+        @test inferred == explicit
+    end
+
+    @testset "OpSum inferred basis equals explicit basis" begin
+        op1 = Op([1 0; 0 1], 3)
+        op2 = Op([0 1; 1 0], 1)
+        opsum = OpSum(op1, op2)
+
+        inferred = sparse(opsum)
+        explicit = sparse(opsum, sites(opsum))
+
+        @test inferred isa SparseMatrixCSC
+        @test size(inferred) == (4, 4)
+        @test inferred == explicit
+    end
+
+    @testset "OpChain inferred basis equals explicit basis" begin
+        op1 = Op([0 1; 1 0], 5)
+        op2 = Op([1 0; 0 -1], 2)
+        opchain = OpChain(op1, op2)
+
+        inferred = sparse(opchain)
+        explicit = sparse(opchain, sites(opchain))
+
+        @test inferred isa SparseMatrixCSC
+        @test size(inferred) == (4, 4)
+        @test inferred == explicit
+    end
+
+    @testset "Repeated sites are unique in inferred basis" begin
+        op1 = Op([1 2; 3 4], 2)
+        op2 = Op([0 1; 1 0], 2)
+
+        chain = OpChain(op1, op2)
+        sumop = OpSum(op1, op2)
+
+        chain_inferred = sparse(chain)
+        sum_inferred = sparse(sumop)
+
+        @test size(chain_inferred) == (2, 2)
+        @test size(sum_inferred) == (2, 2)
+        @test chain_inferred == sparse(chain, [2])
+        @test sum_inferred == sparse(sumop, [2])
+    end
+end
+
 @testset "Sparse Matrix Conversion" begin
     # Test single operator
     σx = Op(PAULI_X, 1)
