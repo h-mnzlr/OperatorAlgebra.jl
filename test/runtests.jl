@@ -34,9 +34,6 @@ using OperatorAlgebra
 
     @info "Testing simplify()..."
     include("test_simplify.jl")
-
-    @info "Testing normal_order()..."
-    include("test_normal_order.jl")
     
     @info "Testing apply operations..."
     include("test_apply.jl")

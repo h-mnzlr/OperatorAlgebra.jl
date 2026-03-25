@@ -50,13 +50,9 @@ _is_sortable(T) = hasmethod(isless, Tuple{T,T})
 # Default iszero implementation
 Base.iszero(op::AbstractOp) = false
 
-"""
-    normal_order(op::AbstractOp)
-
-Return a normal-ordered version of the operator. In particular this means, that if sites are given by a sortable type,
-the operators are sorted by their site identifiers.
-"""
-normal_order(op::AbstractOp) = op  # Default: no normal ordering defined
+# To construct zero and one we need to know the dimension of the matrix inside the operator, which is not possible from the type alone
+Base.zero(::Type{<:AbstractOp}) = error("Not enough information to construct zero from type $(typeof(op))")
+Base.one(::Type{<:AbstractOp}) = error("Not enough information to construct one from type $(typeof(op))")
 
 """
     commutator(o1, o2)
