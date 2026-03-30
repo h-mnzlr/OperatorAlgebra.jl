@@ -47,13 +47,16 @@ See also: [`Op`](@ref), [`OpChain`](@ref), `sparse`, `LinearMap`
 struct OpSum{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}
 
-    function OpSum(ops::Vararg{AbstractOp})
-        Tid = promote_type(map(o -> sitetype(o), ops)...)
-        Tmat = promote_type(map(o -> eltype(o), ops)...)
-
+    function OpSum{Tid,Tmat}(ops::Vararg{AbstractOp}) where {Tid,Tmat}
         converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in ops]
         new{Tid,Tmat}(converted_ops)
     end
+end
+function OpSum(ops::Vararg{AbstractOp})
+    Tid = promote_type(map(o -> sitetype(o), ops)...)
+    Tmat = promote_type(map(o -> eltype(o), ops)...)
+
+    OpSum{Tid,Tmat}(ops...)
 end
 
 # rules for addition

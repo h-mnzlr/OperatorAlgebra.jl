@@ -45,13 +45,16 @@ See also: [`Op`](@ref), [`OpSum`](@ref), [`apply`](@ref), `sparse`
 struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}
 
-    function OpChain(ops::Vararg{AbstractOp})
-        Tid = promote_type(map(o -> sitetype(o), ops)...)
-        Tmat = promote_type(map(o -> eltype(o), ops)...)
-
+    function OpChain{Tid,Tmat}(ops::Vararg{AbstractOp}) where {Tid,Tmat}
         converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in ops]
         new{Tid,Tmat}(converted_ops)
     end
+end
+function OpChain(ops::Vararg{AbstractOp})
+    Tid = promote_type(map(o -> sitetype(o), ops)...)
+    Tmat = promote_type(map(o -> eltype(o), ops)...)
+
+    OpChain{Tid,Tmat}(ops...)
 end
 
 Base.:*(ops::Vararg{AbstractOp}) = OpChain(ops...)
