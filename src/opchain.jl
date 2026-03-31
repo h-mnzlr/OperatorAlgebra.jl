@@ -74,6 +74,8 @@ Base.one(oc::OpChain) = OpChain(one(first(oc.ops)))
 Base.zero(oc::OpChain) = OpChain(zero(first(oc.ops)))
 Base.iszero(oc::OpChain) = any(iszero(op) for op in oc.ops)
 
+Base.isequal(oc::OpChain) = B -> B isa OpChain && length(oc.ops) == length(B.ops) && all(isequal.(oc.ops, B.ops))
+
 Base.convert(::Type{OpChain{Tid,Tmat}}, oc::OpChain) where {Tid,Tmat} = begin
     converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in oc.ops]
     OpChain(converted_ops...)
