@@ -156,7 +156,7 @@ function majorana_SYK4(N::Int; J=1.0)
 
     H = OpSum()
     for i in 1:N, j in i+1:N, k in j+1:N, l in k+1:N
-        H += (majorana_ops[i] * majorana_ops[j] + majorana_ops[k] * majorana_ops[l])
+        H += randn() * (majorana_ops[i] * majorana_ops[j] * majorana_ops[k] * majorana_ops[l])
     end
 
     return J * H
@@ -164,5 +164,5 @@ end
 
 H_SYK4 = majorana_SYK4(12, J=1.0)
 # To ensure fermionic parity symmetry of the constructed operator, we can use the PAULI_Z matrix in place of the identity
-H = atsite(Matrix, H_SYK4, 1:12, id=PAULI_Z)
+H = atsite(Matrix, H_SYK4, 1:12, string=PAULI_Z)
 ```

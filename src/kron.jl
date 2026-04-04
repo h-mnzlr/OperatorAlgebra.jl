@@ -60,8 +60,8 @@ function kronpow(A, n::Integer)
 end
 
 """
-    atsite(T, op::AbstractOp, basis; id=I(local_dim))
-    atsite(T, op::AbstractOp, basis, dims; ids=map(I, dims))
+    atsite(T, op::AbstractOp, basis; id=I(local_dim), string=id)
+    atsite(T, op::AbstractOp, basis, dims; ids=map(I, dims), strings=ids)
 
 Extend a single-site operator to the full Hilbert space of a tensor product system.
 
@@ -91,7 +91,7 @@ basis = [1, 2, 3]
 
 # For sites with different dimensions
 dims = [2, 3, 2]  # Site 2 has dimension 3
-op = Op(custom_3x3_matrix, 2)
+op = Op(rand(3, 3), 2)  # custom 3x3 matrix
 op_full = atsite(op, basis, dims)
 ```
 
@@ -101,7 +101,7 @@ op_full = atsite(op, basis, dims)
 
 See also: [`Op`](@ref), [`kronpow`](@ref), `sparse`
 """
-function atsite(T, op::Op, basis; id=nothing)
+function atsite(T, op::Op, basis; id=nothing, string=id)
     idx_kron = findfirst(x -> x == op.site, basis)
     idx_kron === nothing && throw(ArgumentError("Site $(op.site) not found in basis"))
 
@@ -109,14 +109,15 @@ function atsite(T, op::Op, basis; id=nothing)
     Dsite = size(op.mat, 1)
 
     isnothing(id) && (id = LinearAlgebra.I(Dsite))
-
-    kronpow(id, idx_kron - 1) ⊗ T(op.mat) ⊗ kronpow(id, L - idx_kron)
+    isnothing(string) && (string = id)
+    
+    kronpow(string, idx_kron - 1) ⊗ T(op.mat) ⊗ kronpow(id, L - idx_kron)
 end
-function atsite(T, op::Op, basis, dims; ids=map(I, dims))
+function atsite(T, op::Op, basis, dims; ids=map(I, dims), strings=ids)
     idx_kron = findfirst(x -> x == op.site, basis)
     idx_kron === nothing && throw(ArgumentError("Site $(op.site) not found in basis"))
 
-    Is_left = ids[1:idx_kron - 1]
+    Is_left = strings[1:idx_kron - 1]
     Is_right = ids[(idx_kron + 1):end]
 
     idx_kron == 1 && return T(op.mat) ⊗ kron(Is_right...)
