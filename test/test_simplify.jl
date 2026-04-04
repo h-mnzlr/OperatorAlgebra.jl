@@ -2,17 +2,23 @@ using Test
 using SparseArrays
 
 @testset "simplify() Tests" begin
-    @testset "Returns top-level OpSum" begin
+    @testset "Op simplified is Op" begin
         op = Op([1 0; 0 2], 1)
         s = simplify(op)
 
-        @test s isa OpSum
-        @test length(s.ops) == 1
-        @test s.ops[1] isa OpChain
-        @test length(s.ops[1].ops) == 1
-        @test s.ops[1].ops[1] isa Op
-        @test s.ops[1].ops[1].mat == op.mat
-        @test s.ops[1].ops[1].site == op.site
+        @test s isa Op
+        @test s.mat == op.mat
+        @test s.site == op.site
+        
+    end
+
+    @testset "Preserves minimal structural type" begin
+        A = Op([1 0; 0 2], 1)
+        B = Op([0 1; 1 0], 2)
+
+        @test simplify(OpChain(A)) isa Op
+        @test simplify(OpSum(A)) isa Op
+        @test simplify(OpSum(OpChain(A, B))) isa OpChain
     end
 
     @testset "Flattens nested OpSum/OpChain" begin
@@ -25,8 +31,13 @@ using SparseArrays
         s = simplify(nested)
 
         @test s isa OpSum
-        @test all(term -> term isa OpChain, s.ops)
-        @test all(term -> all(f -> f isa Op, term.ops), s.ops)
+
+        term12 = only(filter(term -> term isa OpChain && [op.site for op in term.ops] == [1, 2], s.ops))
+        term3 = only(filter(term -> term isa Op && term.site == 3, s.ops))
+
+        @test all(f -> f isa Op, term12.ops)
+        @test term3.mat == D.mat
+
         # Distribution from (A + B) * C gives two (1,2)-site terms which are merged,
         # plus the D term.
         @test length(s.ops) == 2
@@ -37,10 +48,8 @@ using SparseArrays
         B = Op([0 1; 1 0], 2)
         C = Op([2 0; 0 1], 1)
 
-        s = simplify(OpChain(A, B, C))
+        chain = simplify(OpChain(A, B, C))
 
-        @test length(s.ops) == 1
-        chain = s.ops[1]
         @test chain isa OpChain
         @test length(chain.ops) == 3
 
@@ -59,10 +68,8 @@ using SparseArrays
         A = Op([1 2; 3 4], 1)
         B = Op([2 0; 0 1], 1)
 
-        s = simplify(OpChain(A, B))
+        chain = simplify(OpChain(A, B))
 
-        @test length(s.ops) == 1
-        chain = s.ops[1]
         @test chain isa OpChain
         @test length(chain.ops) == 1
 
@@ -82,11 +89,11 @@ using SparseArrays
         @test length(s.ops) == 2
 
         # Find the simplified site-1 and site-2 terms
-        site1_chain = only(filter(ch -> length(ch.ops) == 1 && ch.ops[1].site == 1, s.ops))
-        site2_chain = only(filter(ch -> length(ch.ops) == 1 && ch.ops[1].site == 2, s.ops))
+        site1_op = only(filter(op -> op isa Op && op.site == 1, s.ops))
+        site2_op = only(filter(op -> op isa Op && op.site == 2, s.ops))
 
-        @test site1_chain.ops[1].mat == A.mat + B.mat
-        @test site2_chain.ops[1].mat == C.mat
+        @test site1_op.mat == A.mat + B.mat
+        @test site2_op.mat == C.mat
     end
 
     @testset "Merges multi-site OpSum terms only when all sites are the same" begin
