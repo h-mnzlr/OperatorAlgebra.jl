@@ -23,24 +23,24 @@ using SparseArrays
 
     @testset "Flattens nested OpSum/OpChain" begin
         A = Op([1 0; 0 2], 1)
-        B = Op([0 1; 1 0], 1)
-        C = Op([2 0; 0 3], 2)
-        D = Op([3 0; 0 4], 3)
+        B = Op([0 1; 1 0], 2)
+        C = Op([2 0; 0 3], 3)
+        D = Op([3 0; 0 4], 4)
 
-        nested = OpSum(OpChain(OpSum(A, B), C), OpChain(D))
+        nested = (A + B) * C + D
         s = simplify(nested)
 
         @test s isa OpSum
 
-        term12 = only(filter(term -> term isa OpChain && [op.site for op in term.ops] == [1, 2], s.ops))
-        term3 = only(filter(term -> term isa Op && term.site == 3, s.ops))
+        term13 = only(filter(term -> term isa OpChain && [op.site for op in term.ops] == [1, 3], s.ops))
+        term4 = only(filter(term -> term isa Op && term.site == 4, s.ops))
 
-        @test all(f -> f isa Op, term12.ops)
-        @test term3.mat == D.mat
+        @test all(f -> f isa Op, term13.ops)
+        @test term4.mat == D.mat
 
         # Distribution from (A + B) * C gives two (1,2)-site terms which are merged,
         # plus the D term.
-        @test length(s.ops) == 2
+        @test length(s.ops) == 3
     end
 
     @testset "Merges only consecutive repeated sites in OpChain terms" begin
@@ -67,15 +67,17 @@ using SparseArrays
     @testset "Consecutive repeated sites are merged in OpChain terms" begin
         A = Op([1 2; 3 4], 1)
         B = Op([2 0; 0 1], 1)
+        C = Op([2 0; 0 1], 2)
 
-        chain = simplify(OpChain(A, B))
+        o = A * B * C
+        chain = simplify(o)
 
         @test chain isa OpChain
-        @test length(chain.ops) == 1
+        @test length(chain.ops) == 2
 
         # site 1 is merged with OpChain ordering semantics: B * A
-        @test chain.ops[1].site == 1
-        @test chain.ops[1].mat == B.mat * A.mat
+        site1_op = only(filter(op -> op isa Op && op.site == 1, chain.ops))
+        @test site1_op.mat == B.mat * A.mat
     end
 
     @testset "Merges single-site terms in OpSum" begin
@@ -96,29 +98,24 @@ using SparseArrays
         @test site2_op.mat == C.mat
     end
 
-    @testset "Merges multi-site OpSum terms only when all sites are the same" begin
+    @testset "Merges multi-site OpSum terms only when all operators are the same" begin
         A1 = Op([1 0; 0 1], 1)
         A2 = Op([2 0; 0 2], 2)
-        B1 = Op([0 1; 1 0], 1)
-        B2 = Op([2 0; 0 2], 2)
-        C1 = Op([4 0; 0 4], 2)
-        C2 = Op([5 0; 0 5], 1)
+        B1 = Op([1 0; 0 1], 1)
+        B2 = Op([4 0; 0 4], 2)
+        C1 = Op([4 0; 0 4], 1)
+        C2 = Op([5 0; 0 5], 2)
+        D = Op([0 1; 1 0], 1)
 
-        # First two terms have identical site pattern (1,2) and should be merged.
-        # Third term has pattern (2,1) and should remain separate.
-        s = simplify(OpSum(OpChain(A1, A2), OpChain(B1, B2), OpChain(C1, C2)))
+        o = A1 * A2 + B1 * B2 + C1 * C2 + D
+        omat = Array(o, [1, 2])
+        s = simplify(o)
+        smat = Array(s, [1, 2])
 
         @test s isa OpSum
         @test length(s.ops) == 2
 
-        term12 = only(filter(ch -> [op.site for op in ch.ops] == [1, 2], s.ops))
-        term21 = only(filter(ch -> [op.site for op in ch.ops] == [2, 1], s.ops))
-
-        @test term12.ops[1].mat == A1.mat + B1.mat
-        @test term12.ops[2].mat == A2.mat
-
-        @test term21.ops[1].mat == C1.mat
-        @test term21.ops[2].mat == C2.mat
+        @test omat == smat
     end
 end
 
@@ -241,7 +238,7 @@ end
         randop1() = Op(rand(-1:1, 2, 2), 1)
         randop2() = Op(rand(-1:1, 3, 3), 2)
 
-        for _ in 1:15
+        for _ in 1:100
             A1 = randop1()
             A2 = randop1()
             B1 = randop2()
@@ -252,8 +249,13 @@ end
                 OpChain(A2, B2),
                 OpChain(A1, OpSum(B1, B2)),
             )
-
-            assert_matrix_equivalent(expr, basis; dims=dims)
+            
+            try
+                assert_matrix_equivalent(expr, basis; dims=dims)
+            catch e
+                @error "Failed for expression $(OperatorAlgebra.sitetype(expr)), $(eltype(expr)): $expr"
+                rethrow(e)
+            end
         end
     end
 end

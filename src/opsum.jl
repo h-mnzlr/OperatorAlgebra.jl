@@ -58,6 +58,9 @@ function OpSum(ops::Vararg{AbstractOp})
 
     OpSum{Tid,Tmat}(ops...)
 end
+function OpSum()
+    OpSum{Bool,Bool}()
+end
 
 # rules for addition
 Base.:+(ops::Vararg{AbstractOp}) = OpSum(ops...)

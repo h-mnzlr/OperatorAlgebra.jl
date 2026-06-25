@@ -9,8 +9,8 @@ For `OpSum` operators, all terms (single-site and multiple-site) get merged by s
 """
 simplify(op::AbstractOp) = _simplify_rulestack(op)
 simplify(op::Op) = op  # Op's are as simple as can be
-simplify(oc::OpChain) = _simplify_rulestack(oc, [:SamesiteProductRule, :IdentityRule, :FlattenProductSumRule, :FlattenProductRule])
-simplify(oc::OpSum) = _simplify_rulestack(oc, [:ZeroRule, :AssociativityRule, :RecursionRule, :FlattenSumRule])
+simplify(oc::OpChain) = _simplify_rulestack(oc, [:TypeSimplifyRule, :SamesiteProductRule, :IdentityRule, :FlattenProductSumRule, :FlattenProductRule])
+simplify(oc::OpSum) = _simplify_rulestack(oc, [:TypeSimplifyRule, :ZeroRule, :AssociativitySimpleRule, :RecursionRule, :FlattenSumRule])
 
 _simplify_rulestack(op::TOp, rule_stack) where {TOp <: AbstractOp} = begin
     while !isempty(rule_stack)
@@ -98,6 +98,7 @@ end
 _apply_rule(os::OpSum, ::Val{:RecursionRule}) = begin
     ops = map(simplify, os.ops)
     
+    display(ops)
     OpSum(ops...), [:ZeroRule, :FlattenSumRule]
 end
 
@@ -119,9 +120,21 @@ _apply_rule(os::OpSum, ::Val{:FlattenSumRule}) = begin
     OpSum(new_ops...), nothing
 end
 
+# Obtain scalar factor to scale one matrix into the other. If it is not possible return NaN.
+_scalar_factor(mat1, mat2) = begin
+    m = .!(iszero.(mat1) .& iszero.(mat2))
+
+    scalings = mat1[m] ./ mat2[m]
+    if all(y->isequal(y, scalings[1]), scalings)
+        return first(scalings)
+    else
+        return NaN
+    end
+end
+
 # AssociativityRule attempts to leverage associativity of operator chains to merge terms in an OpSum.
 # Assumes that OpSum terms are already flattened, i.e., every operator in the OpSum consists of Op's or chains of Op's.
-_apply_rule(os::OpSum{Tid,Tmat}, ::Val{:AssociativityRule}) where {Tid,Tmat} = begin
+_apply_rule(os::OpSum{Tid,Tmat}, ::Val{:AssociativitySimpleRule}) where {Tid,Tmat} = begin
     # Radix-sort like algorithm to group terms by their site pattern.
     sites_op_map = Dict{Vector{Tid}, Vector{AbstractOp{Tid,Tmat}}}()
     for o in os.ops
@@ -140,61 +153,30 @@ _apply_rule(os::OpSum{Tid,Tmat}, ::Val{:AssociativityRule}) where {Tid,Tmat} = b
 
     # Check if operators with the same site patterns are actually mergeable, i.e., OpChains may
     # only differ with their representation matrix on a single site. If this is fulfilled merge the operators.
-    new_ops = Vector{AbstractOp{Tid,Tmat}}()
+    new_ops = Vector{AbstractOp{Tid}}()
+    was_merged = false
     for (s, ops) in sites_op_map
         length(ops) == 1 && (push!(new_ops, only(ops)); continue)
         length(s) == 1 && (push!(new_ops, Op(sum(o.mat for o in ops), only(s))); continue)
 
-
-        # for multiple-site terms we can only merge if they differ on a single site, i.e., they are of the form A * O and B * O with A and B single-site operators and O a common OpChain factor.
-        remaining = AbstractOp{Tid,Tmat}[o for o in ops]
-        changed = true
-        while changed
-            changed = false
-            merged_flags = falses(length(remaining))
-            next_remaining = AbstractOp{Tid,Tmat}[]
-            for i in eachindex(remaining)
-                merged_flags[i] && continue
-                found_merge = false
-                for j in (i+1):length(remaining)
-                    merged_flags[j] && continue
-                    oi = remaining[i]
-                    oj = remaining[j]
-                    # Both must be OpChains of the same length
-                    mats_i = [subo.mat for subo in oi.ops]
-                    mats_j = [subo.mat for subo in oj.ops]
-                    # Find positions where they differ
-                    diff_positions = Int[]
-                    for k in eachindex(mats_i)
-                        if mats_i[k] != mats_j[k]
-                            push!(diff_positions, k)
-                        end
-                    end
-                    if length(diff_positions) == 1
-                        # Merge: sum the matrices at the differing position, keep the rest
-                        dp = only(diff_positions)
-                        new_sub_ops = [
-                            k == dp ? Op(mats_i[k] + mats_j[k], oi.ops[k].site) : oi.ops[k]
-                            for k in eachindex(mats_i)
-                        ]
-                        merged_op = OpChain(new_sub_ops)
-                        push!(next_remaining, merged_op)
-                        merged_flags[i] = true
-                        merged_flags[j] = true
-                        changed = true
-                        found_merge = true
-                        break
-                    end
-                end
-                if !found_merge && !merged_flags[i]
-                    push!(next_remaining, remaining[i])
-                end
-            end
-            remaining = next_remaining
+        merging_matrix = ones(length(ops), length(ops))
+        for (i, o1) in enumerate(ops), (j, o2) in enumerate(ops)
+            o1 === o2 && continue
+            merging_matrix[i, j] = prod(_scalar_factor(sop1.mat, sop2.mat) for (sop1, sop2) in zip(o1.ops, o2.ops))
         end
-        append!(new_ops, remaining)
+
+        seen = Set{Int}()
+        for i in axes(merging_matrix, 1)
+            i in seen && continue
+            m = .!isnan.(merging_matrix[:, i]) 
+
+            push!(seen, findall(m)...)
+            push!(new_ops, sum(merging_matrix[m, i]) * ops[i])
+        end
+        was_merged = any(!isnan, merging_matrix)
     end
-    OpSum(new_ops...), nothing
+    rules = was_merged ? [:ZeroRule, :AssociativitySimpleRule] : nothing
+    OpSum(new_ops...), rules
 end
 
 _apply_rule(oc::Union{OpChain,OpSum}, ::Val{:TypeSimplifyRule}) = begin
@@ -213,18 +195,13 @@ the operators are sorted by their site identifiers. If a `basis` is provided, th
 Furthermore, it is possible to specify commutation relations by providing the specific identity relevant for the commutation on a given side.
 The commutation relations are then inferred through the commutator of the operator with the identity on the other side, i.e., for fermions the identity operators should be `PAULI_Z` for all fermionic local hilbert spaces in the basis.
 """
-function normal_order(op::AbstractOp)
+function normal_order(op::AbstractOp; kwargs...)
     basis = collect(sites(op))
     _sort_if_sortable!(basis)
-    normal_order(op, basis)
+    normal_order(op, basis; kwargs...)
 end
 
-function normal_order(op::AbstractOp{Tid}, basis::Vector{Tid}) where {Tid}
-    ids = _default_ids(op, basis)
-    normal_order(op, basis, ids)
-end
-
-function normal_order(op::AbstractOp{Tid}, basis::Vector{Tid}, ids::Vector{<:AbstractMatrix}) where {Tid}
+function normal_order(op::AbstractOp{Tid}, basis::Vector{Tid}; ids=_default_ids(op, basis), strings=ids) where {Tid}
     # assert all sites in the operator are present in the basis
     all(collect(sites(op)) .∈ Ref(basis)) || throw(ArgumentError("All sites in the operator must be present in the basis"))
     # assert basis and ids have the same length
@@ -236,45 +213,47 @@ function normal_order(op::AbstractOp{Tid}, basis::Vector{Tid}, ids::Vector{<:Abs
     simplify(_normal_order(sop, basis, ids))
 end
 
-_normal_order(op::Op, _...) = op
-
-function _normal_order(oc::OpChain{Tid,Tmat}, basis::Vector{Tid}, ids::Vector{<:AbstractMatrix}) where {Tid,Tmat}
+_normal_order(op::Op, args...; kwargs...) = op
+function _normal_order(oc::OpChain{Tid,Tmat}, basis::AbstractVector{Tid}; ids, strings=ids) where {Tid,Tmat}
     index_map = Dict(s => i for (i, s) in enumerate(basis))
     id_map = Dict(s => ids[i] for (i, s) in enumerate(basis))
+    string_map = Dict(s => strings[i] for (i, s) in enumerate(basis))
 
     # use a bubble sort-like approach to sort the operators according to the basis order, while applying the relevant commutation relations
     ordered = collect(oc.ops)
-    coeff = one(Tmat)
+
     n = length(ordered)
     for pass in 1:max(0, n - 1)
         for i in 1:(n - pass)
-            li = get(index_map, ordered[i].site, typemax(Int))
-            ri = get(index_map, ordered[i + 1].site, typemax(Int))
+            li = index_map[ordered[i].site]
+            ri = index_map[ordered[i+1].site]
             if li > ri
-                id_right = get(id_map, ordered[i + 1].site, Matrix(I, size(ordered[i].mat, 1), size(ordered[i].mat, 1)))
-                swap_sign = _commutation_sign(ordered[i], id_right)
-                coeff *= swap_sign
+                ordered[i].mat = ordered[i].mat * id_map[ordered[i+1].site]
+                ordered[i+1].mat = string_map[ordered[i].site] * ordered[i+1].mat
                 ordered[i], ordered[i + 1] = ordered[i + 1], ordered[i]
             end
         end
     end
 
-    coeff * OpChain(ordered...)
+    OpChain(ordered...)
 end
 
-function _normal_order(os::OpSum{Tid,Tmat}, basis::Vector{Tid}, ids::Vector{<:AbstractMatrix}) where {Tid,Tmat}
+function _normal_order(os::OpSum{Tid,Tmat}, basis::Vector{Tid}; ids, strings=ids) where {Tid,Tmat}
     # normal order each term in the sum recursively
-    terms = [_normal_order(term, basis, ids) for term in os.ops]
+    terms = [_normal_order(term, basis; ids, strings) for term in os.ops]
     sumsafe = simplify(OpSum(terms...))
 
     # last, sort the terms in the sum according to the first site in their site pattern, using the basis order
     index_map = Dict(s => i for (i, s) in enumerate(basis))
     term_key(term) = begin
-        fs = first(term.ops).site
-        get(index_map, fs, typemax(Int))
+        map(term.ops) do o
+            fs = first(term.ops).site
+            get(index_map, fs, typemax(Int))
+        end |> Tuple
     end
+    term_key(o::Op) = (get(index_map, o.site, typemax(Int)),)
 
-    sortidx = sortperm(sumsafe.ops; by=term_key, lt=(a, b) -> a < b)
+    sortidx = sortperm(sumsafe.ops; by=term_key)
     OpSum(sumsafe.ops[sortidx]...)
 end
 
@@ -289,12 +268,4 @@ function _default_ids(op::AbstractOp{Tid,Tmat}, basis::Vector{Tid}) where {Tid,T
     end
 
     [Matrix(I, get(dim_map, s, default_dim), get(dim_map, s, default_dim)) for s in basis]
-end
-
-function _commutation_sign(op::Op, id_other::AbstractMatrix)
-    op_id = op.mat * id_other
-    id_op = id_other * op.mat
-    op_id == id_op && return one(eltype(op))
-    op_id == -id_op && return -one(eltype(op))
-    one(eltype(op))
 end
