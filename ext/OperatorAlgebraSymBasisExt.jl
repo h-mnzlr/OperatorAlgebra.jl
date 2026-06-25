@@ -40,7 +40,7 @@ function _apply_op(os::OpSum, states)
         end
     end
     maxval = maximum(values(nstates))
-    filter(p -> abs(p[2]) > 1e2 * eps(maxval), nstates)
+    filter(p -> abs(p[2]) > 1e2 * abs(eps(float(maxval))), nstates)
     nstates
 end
 
