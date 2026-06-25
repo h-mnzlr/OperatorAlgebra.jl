@@ -1,7 +1,7 @@
 name = "OperatorAlgebra"
 uuid = "49087e99-997d-48ed-8945-d57b707c274b"
 authors = ["h-mnzlr <67161416+h-mnzlr@users.noreply.github.com>"]
-version = "0.2.6"
+version = "0.2.7"
 
 [deps]
 Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
@@ -11,9 +11,11 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [weakdeps]
 ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
+SymBasis = "0806812d-f945-4f84-939d-820504b53c51"
 
 [extensions]
 OperatorAlgebraITensorMPSExt = "ITensorMPS"
+OperatorAlgebraSymBasisExt = "SymBasis"
 
 [compat]
 Latexify = "0.16.10"
