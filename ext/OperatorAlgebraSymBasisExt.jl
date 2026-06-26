@@ -98,7 +98,7 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true)
     end
 
     H = sparse(I_vec, J_vec, V_vec)
-    check_hermitean && !ishermitian(H) && throw(ArgumentError("Hamiltonian is not Hermitean: Antihermitean part has norm $(norm(H-H')/2)"))
+    check_hermitian && !ishermitian(H) && throw(ArgumentError("Hamiltonian is not Hermitean: Antihermitean part has norm $(norm(H-H')/2)"))
 
     H
 end
