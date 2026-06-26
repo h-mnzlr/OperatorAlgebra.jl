@@ -42,7 +42,8 @@ Base.:-(A::AbstractOp, B::AbstractOp) = A + -B
 
 Return a vector of site identifiers where the operator acts.
 """
-sites(::AbstractOp) = error("sites function not implemented for $(typeof(op))")
+sites(o::AbstractOp) = first.(basis_info(o))
+site_dims(o::AbstractOp) = last.(basis_info(o))
 
 _sort_if_sortable!(vs::Vector{T}) where {T} = _is_sortable(T) ? sort!(vs) : vs 
 _is_sortable(T) = hasmethod(isless, Tuple{T,T})
@@ -60,6 +61,3 @@ Base.one(::Type{<:AbstractOp}) = error("Not enough information to construct one 
 Return the commutator of two operators.
 """
 commutator(o1, o2) = o1 * o2 - o2 * o1
-
-sites(o::AbstractOperator) = first.(basis_info(o))
-site_dims(o::AbstractOperator) = last.(basis_info(o))
