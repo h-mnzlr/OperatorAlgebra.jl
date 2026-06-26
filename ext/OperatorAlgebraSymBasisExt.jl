@@ -51,8 +51,6 @@ function _filter_too_small(vals_dict)
 end
 
 OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basis{Ts}) where {Ts} = begin
-    Tel = promote_type(eltype(v), eltype(H))
-
     b = Dict(ba.states .=> eachindex(ba.states))
     vout = complex(zero(v))
 
