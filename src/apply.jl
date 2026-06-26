@@ -37,8 +37,7 @@ result = apply(chain, state)
 
 See also: [`apply!`](@ref), [`Op`](@ref), [`OpChain`](@ref), `sparse`
 """
-apply(op::AbstractOp, state) = apply!(op, deepcopy(state))
-apply(op::AbstractOp{Tid}, state, basis::AbstractVector{Tid}) where {Tid} = apply!(op, deepcopy(state), basis)
+apply(op::AbstractOp, state, args...; kwargs...) = apply!(op, deepcopy(state), args...; kwargs...)
 
 """
     apply!(op::AbstractOp, state)
@@ -65,21 +64,22 @@ apply!(σx, state)  # state is now modified
 
 See also: [`apply`](@ref), [`Op`](@ref), [`OpChain`](@ref)
 """
-apply!(op::Op, state) = begin
+apply!(op::AbstractOp, args...; kwargs...) = _apply!(op, args...; kwargs...)
+_apply!(op::Op, state) = begin
     state[op.site] = op.mat * state[op.site]
     state
 end
-apply!(op::Op{Tid}, state, bases::AbstractVector{Tid}) where {Tid} = begin
+_apply!(op::Op{Tid}, state, bases::AbstractVector{Tid}) where {Tid} = begin
     idx = findfirst(==(op.site), bases)
     state[idx] = op.mat * state[idx]
     state
 end
 
-apply!(oc::OpChain, state, args...) = begin
+_apply!(oc::OpChain, state, args...; kwargs...) = begin
     for op in reverse(oc.ops)
-        apply!(op, state, args...)
+        _apply!(op, state, args...; kwargs...)
     end
     state
 end
 
-apply!(::OpSum, _...) = throw(ArgumentError("apply for OpSum is not well-defined for non-product states as implemented: Convert to a matrix type, e.g., with `sparse`."))
+_apply!(::OpSum, _...) = throw(ArgumentError("apply for OpSum is not well-defined for non-product states as implemented: Convert to a matrix type, e.g., with `sparse`."))

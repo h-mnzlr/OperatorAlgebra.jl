@@ -50,24 +50,29 @@ function _filter_too_small(vals_dict)
     vals_dict  # if we do not know the type, we won't filter
 end
 
-OperatorAlgebra.apply(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basis{Ts}) where {Ts} = begin
+OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basis{Ts}) where {Ts} = begin
     Tel = promote_type(eltype(v), eltype(H))
 
     b = Dict(ba.states .=> eachindex(ba.states))
-    vout = zeros(ComplexF64, length(ba.states))
+    vout = complex(zero(v))
 
-    for (i, val) in enumerate(v)
+    for (n, val) in enumerate(v)
         iszero(val) && continue
-        s = ba.states[i]
+        s = ba.states[n]
         applied_s = _apply_op(H, Dict(s => val))
         for (s2, v2) in applied_s
             repr_s, repr_f = representative(s2, ba)
             repr_s ∉ keys(b) &&  continue 
-            vout[b[repr_s]] += v2 * repr_f
+
+            m = b[repr_s]
+            norm_factor = sqrt(ba.norms[m]/ ba.norms[n])
+
+            vout[b[repr_s]] += v2 * repr_f * norm_factor
         end
     end
     
-    vout
+    copy!(v, vout)
+    v
 end
 
 function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true)
