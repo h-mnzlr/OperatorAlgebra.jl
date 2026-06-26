@@ -39,16 +39,22 @@ function _apply_op(os::OpSum, states)
             nstates[s] = v + ov
         end
     end
-    maxval = maximum(values(nstates))
-    filter(p -> abs(p[2]) > 1e2 * abs(eps(float(maxval))), nstates)
-    nstates
+    
+    _filter_too_small(nstates)
+end
+function _filter_too_small(vals_dict::Dict{T, Union{Tf, Complex{Tf}}}; cutoff=1e2 * eps(Tf)) where {T, Tf<:AbstractFloat}
+    maxval = maximum(abs, values(vals_dict))
+    filter(p -> abs(p[2]) > maxval * cutoff, vals_dict)
+end
+function _filter_too_small(vals_dict)
+    vals_dict  # if we do not know the type, we won't filter
 end
 
 OperatorAlgebra.apply(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basis{Ts}) where {Ts} = begin
     Tel = promote_type(eltype(v), eltype(H))
 
     b = Dict(ba.states .=> eachindex(ba.states))
-    vout = zeros(Tel, length(ba.states))
+    vout = zeros(ComplexF64, length(ba.states))
 
     for (i, val) in enumerate(v)
         iszero(val) && continue
@@ -56,6 +62,7 @@ OperatorAlgebra.apply(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basis
         applied_s = _apply_op(H, Dict(s => val))
         for (s2, v2) in applied_s
             repr_s, repr_f = representative(s2, ba)
+            repr_s ∉ keys(b) &&  continue 
             vout[b[repr_s]] += v2 * repr_f
         end
     end
@@ -70,12 +77,14 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitean=true)
     V_vec = ComplexF64[]
 
     for state1 in ba.states
-        applied_s = _apply_op(H, Dict(state1 => one(eltype(H))))
+        applied_s = _apply_op(H, Dict(state1 => one(complex(eltype(H)))))
 
         repr_states = empty(applied_s)
         for (s, v) in applied_s
             repr_s, repr_f = representative(s, ba)
-            vo = get(repr_states, repr_s, zero(eltype(H)))
+            repr_s ∉ keys(b) &&  continue
+
+            vo = get(repr_states, repr_s, zero(complex(eltype(H))))
             repr_states[repr_s] = v * repr_f + vo
         end
 
@@ -89,7 +98,7 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitean=true)
     end
 
     H = sparse(I_vec, J_vec, V_vec)
-    check_hermitean && ishermitian(H) || throw(ArgumentError("Hamiltonian is not Hermitean: Antihermitean part has norm $(norm(H-H')/2)"))
+    check_hermitean && !ishermitian(H) && throw(ArgumentError("Hamiltonian is not Hermitean: Antihermitean part has norm $(norm(H-H')/2)"))
 
     H
 end
