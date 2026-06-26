@@ -70,7 +70,7 @@ OperatorAlgebra.apply(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basis
     vout
 end
 
-function _symmetry_reduced_H_sparse(H, ba; check_hermitean=true)
+function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true)
     b = Dict(ba.states .=> eachindex(ba.states))
     I_vec = Int64[]
     J_vec = Int64[]
