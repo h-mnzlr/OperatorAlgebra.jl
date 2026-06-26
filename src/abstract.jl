@@ -60,3 +60,6 @@ Base.one(::Type{<:AbstractOp}) = error("Not enough information to construct one 
 Return the commutator of two operators.
 """
 commutator(o1, o2) = o1 * o2 - o2 * o1
+
+sites(o::AbstractOperator) = first.(basis_info(o))
+site_dims(o::AbstractOperator) = last.(basis_info(o))

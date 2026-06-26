@@ -104,4 +104,26 @@ Base.show(io::IO, os::OpSum) = begin
     print(io, "])")
 end
 
-sites(os::OpSum) = vcat([sites(op) for op in os.ops]...) |> unique |> _sort_if_sortable!
+_check_consistent_basis_info(site_and_dim; should_throw=true) = begin
+    T = eltype(site_and_dim)
+    d = Dict{T.parameters...}(site_and_dim[1])
+    for (s, dim) in site_and_dim[2:end]
+        dtest = get(d, s, nothing)
+        isnothing(dtest) && begin
+            d[s] = dim
+            continue
+        end
+
+        dim == dtest && continue
+        should_throw && throw(DimensionMismatch("Unable to obtain basis information due to incompatible dimension at site $s: $dtest incompatible with $dim."))
+        return false
+    end
+    true
+end
+
+basis_info(oc::Union{OpChain,OpSum}) =  begin
+    allsites = vcat([basis_info(o) for o in oc.ops])
+    flattened = collect(Iterators.flatten(allsites))
+    _check_consistent_basis_info(flattened)
+    sort!(unique(flattened), by=first)
+end

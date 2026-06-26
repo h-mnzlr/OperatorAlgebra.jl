@@ -67,3 +67,5 @@ commutator(o1::Op, o2::Op) = begin
         return commutator(OpChain(o1, o2), OpChain(o2, o1))
     end
 end
+
+basis_info(op::Op) = [op.site => size(op.mat)]
