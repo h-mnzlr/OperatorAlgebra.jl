@@ -76,7 +76,7 @@ Base.adjoint(os::OpSum) = OpSum([adjoint(op) for op in os.ops]...)
 
 Base.one(os::OpSum) = OpSum(one(first(os.ops)))
 Base.zero(os::OpSum) = OpSum(zero(first(os.ops)))
-Base.iszero(os::OpSum) = all(iszero(op) for op in os.ops)
+Base.iszero(os::OpSum) = isempty(os.ops) ? true : all(iszero(op) for op in os.ops)
 
 Base.isequal(os::OpSum) = B -> B isa OpSum && length(os.ops) == length(B.ops) && all(isequal.(os.ops, B.ops))
 
