@@ -46,7 +46,7 @@ struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}
 
     function OpChain{Tid,Tmat}(ops::Vararg{AbstractOp}) where {Tid,Tmat}
-        converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in ops]
+        converted_ops = [convert(AbstractOp{Tid,Tmat}, o) for o in ops]
         new{Tid,Tmat}(converted_ops)
     end
 end
@@ -77,7 +77,7 @@ Base.iszero(oc::OpChain) = any(iszero(op) for op in oc.ops)
 Base.isequal(oc::OpChain) = B -> B isa OpChain && length(oc.ops) == length(B.ops) && all(isequal.(oc.ops, B.ops))
 
 Base.convert(::Type{OpChain{Tid,Tmat}}, oc::OpChain) where {Tid,Tmat} = begin
-    converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in oc.ops]
+    converted_ops = [convert(AbstractOp{Tid,Tmat}, o) for o in oc.ops]
     OpChain(converted_ops...)
 end
 

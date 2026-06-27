@@ -48,7 +48,7 @@ struct OpSum{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}
 
     function OpSum{Tid,Tmat}(ops::Vararg{AbstractOp}) where {Tid,Tmat}
-        converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in ops]
+        converted_ops = [convert(AbstractOp{Tid,Tmat}, o) for o in ops]
         new{Tid,Tmat}(converted_ops)
     end
 end
@@ -92,7 +92,7 @@ Base.iszero(os::OpSum) = all(iszero(op) for op in os.ops)
 Base.isequal(os::OpSum) = B -> B isa OpSum && length(os.ops) == length(B.ops) && all(isequal.(os.ops, B.ops))
 
 Base.convert(::Type{OpSum{Tid,Tmat}}, os::OpSum) where {Tid,Tmat} = begin
-    converted_ops = [convert(typeof(o).name.wrapper{Tid,Tmat}, o) for o in os.ops]
+    converted_ops = [convert(AbstractOp{Tid,Tmat}, o) for o in os.ops]
     OpSum(converted_ops...)
 end
 

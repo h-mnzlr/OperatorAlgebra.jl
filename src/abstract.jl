@@ -37,6 +37,8 @@ Base.:/(A::AbstractOp, s::Number) = inv(s) * A
 
 Base.:-(A::AbstractOp, B::AbstractOp) = A + -B
 
+Base.convert(::Type{AbstractOp{Tid,Tmat}}, op::Top) where {Tid,Tmat,Top} = convert(Top.name.wrapper{Tid,Tmat}, op)
+
 """ 
     sites(op::AbstractOp)
 
