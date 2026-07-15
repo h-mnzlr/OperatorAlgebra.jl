@@ -47,43 +47,49 @@ See also: [`Op`](@ref), [`OpChain`](@ref), `sparse`, `LinearMap`
 struct OpSum{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}
 
-    function OpSum{Tid,Tmat}(ops::Vararg{AbstractOp}) where {Tid,Tmat}
-        converted_ops = [convert(AbstractOp{Tid,Tmat}, o) for o in ops]
+    # fast path: the vector already has the right parameters and is adopted
+    # without copying or converting, so the caller must not mutate it afterwards
+    function OpSum{Tid,Tmat}(ops::Vector{<:AbstractOp{Tid,Tmat}}) where {Tid,Tmat}
+        new{Tid,Tmat}(ops)
+    end
+    function OpSum{Tid,Tmat}(ops::AbstractVector) where {Tid,Tmat}
+        converted_ops = AbstractOp{Tid,Tmat}[convert(AbstractOp{Tid,Tmat}, o) for o in ops]
         new{Tid,Tmat}(converted_ops)
     end
 end
-function OpSum(ops::Vararg{AbstractOp})
-    Tid = promote_type(map(o -> sitetype(o), ops)...)
-    Tmat = promote_type(map(o -> eltype(o), ops)...)
+OpSum{Tid,Tmat}(ops::Vararg{AbstractOp}) where {Tid,Tmat} = OpSum{Tid,Tmat}(collect(AbstractOp, ops))
+function OpSum(ops::AbstractVector{<:AbstractOp})
+    isempty(ops) && return OpSum{Bool,Bool}(ops)
+    Tid = mapreduce(sitetype, promote_type, ops)
+    Tmat = mapreduce(eltype, promote_type, ops)
 
-    OpSum{Tid,Tmat}(ops...)
+    OpSum{Tid,Tmat}(ops)
 end
+OpSum(ops::Vararg{AbstractOp}) = OpSum(collect(AbstractOp, ops))
 function OpSum()
     OpSum{Bool,Bool}()
 end
 
 # rules for addition
 Base.:+(ops::Vararg{AbstractOp}) = OpSum(ops...)
-Base.:+(os::OpSum, o::AbstractOp) = OpSum(os.ops..., o)
-Base.:+(o::AbstractOp, os::OpSum) = OpSum(o, os.ops...)
-Base.:+(os1::OpSum, os2::OpSum) = OpSum(os1.ops..., os2.ops...)
+Base.:+(os::OpSum, o::AbstractOp) = OpSum(vcat(os.ops, AbstractOp[o]))
+Base.:+(o::AbstractOp, os::OpSum) = OpSum(vcat(AbstractOp[o], os.ops))
+Base.:+(os1::OpSum, os2::OpSum) = OpSum(vcat(os1.ops, os2.ops))
 
 # scalar multiplication
-Base.:*(s::Number, A::OpSum) = OpSum([s * op for op in A.ops]...)
-Base.:*(A::OpSum, s::Number) = OpSum([op * s for op in A.ops]...)
+Base.:*(s::Number, A::OpSum) = OpSum(AbstractOp[s * op for op in A.ops])
+Base.:*(A::OpSum, s::Number) = OpSum(AbstractOp[op * s for op in A.ops])
 
-Base.adjoint(os::OpSum) = OpSum([adjoint(op) for op in os.ops]...)
+Base.adjoint(os::OpSum) = OpSum(AbstractOp[adjoint(op) for op in os.ops])
 
 Base.one(os::OpSum) = OpSum(one(first(os.ops)))
 Base.zero(os::OpSum) = OpSum(zero(first(os.ops)))
 Base.iszero(os::OpSum) = isempty(os.ops) ? true : all(iszero(op) for op in os.ops)
+Base.isone(os::OpSum) = length(os.ops) == 1 && isone(only(os.ops))
 
 Base.isequal(os::OpSum) = B -> B isa OpSum && length(os.ops) == length(B.ops) && all(isequal.(os.ops, B.ops))
 
-Base.convert(::Type{OpSum{Tid,Tmat}}, os::OpSum) where {Tid,Tmat} = begin
-    converted_ops = [convert(AbstractOp{Tid,Tmat}, o) for o in os.ops]
-    OpSum(converted_ops...)
-end
+Base.convert(::Type{OpSum{Tid,Tmat}}, os::OpSum) where {Tid,Tmat} = OpSum{Tid,Tmat}(os.ops)
 
 Base.show(io::IO, os::OpSum) = begin
     print(io, "OpSum(ops=[")

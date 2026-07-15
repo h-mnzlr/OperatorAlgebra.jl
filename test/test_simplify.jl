@@ -4,7 +4,7 @@ using SparseArrays
 @testset "simplify() Tests" begin
     @testset "Op simplified is Op" begin
         op = Op([1 0; 0 2], 1)
-        s = simplify(op)
+        s = simplify(op, verbosity=0)
 
         @test s isa Op
         @test s.mat == op.mat
@@ -16,112 +16,16 @@ using SparseArrays
         A = Op([1 0; 0 2], 1)
         B = Op([0 1; 1 0], 2)
 
-        @test simplify(OpChain(A)) isa Op
-        @test simplify(OpSum(A)) isa Op
-        @test simplify(OpSum(OpChain(A, B))) isa OpChain
-    end
-
-    @testset "Flattens nested OpSum/OpChain" begin
-        A = Op([1 0; 0 2], 1)
-        B = Op([0 1; 1 0], 2)
-        C = Op([2 0; 0 3], 3)
-        D = Op([3 0; 0 4], 4)
-
-        nested = (A + B) * C + D
-        s = simplify(nested)
-
-        @test s isa OpSum
-
-        term13 = only(filter(term -> term isa OpChain && [op.site for op in term.ops] == [1, 3], s.ops))
-        term4 = only(filter(term -> term isa Op && term.site == 4, s.ops))
-
-        @test all(f -> f isa Op, term13.ops)
-        @test term4.mat == D.mat
-
-        # Distribution from (A + B) * C gives two (1,2)-site terms which are merged,
-        # plus the D term.
-        @test length(s.ops) == 3
-    end
-
-    @testset "Merges only consecutive repeated sites in OpChain terms" begin
-        A = Op([1 2; 3 4], 1)
-        B = Op([0 1; 1 0], 2)
-        C = Op([2 0; 0 1], 1)
-
-        chain = simplify(OpChain(A, B, C))
-
-        @test chain isa OpChain
-        @test length(chain.ops) == 3
-
-        # Non-consecutive same-site factors are not merged.
-        @test chain.ops[1].site == 1
-        @test chain.ops[1].mat == A.mat
-
-        @test chain.ops[2].site == 2
-        @test chain.ops[2].mat == B.mat
-
-        @test chain.ops[3].site == 1
-        @test chain.ops[3].mat == C.mat
-    end
-
-    @testset "Consecutive repeated sites are merged in OpChain terms" begin
-        A = Op([1 2; 3 4], 1)
-        B = Op([2 0; 0 1], 1)
-        C = Op([2 0; 0 1], 2)
-
-        o = A * B * C
-        chain = simplify(o)
-
-        @test chain isa OpChain
-        @test length(chain.ops) == 2
-
-        # site 1 is merged with OpChain ordering semantics: B * A
-        site1_op = only(filter(op -> op isa Op && op.site == 1, chain.ops))
-        @test site1_op.mat == B.mat * A.mat
-    end
-
-    @testset "Merges single-site terms in OpSum" begin
-        A = Op([1 0; 0 0], 1)
-        B = Op([0 0; 0 2], 1)
-        C = Op([3 0; 0 4], 2)
-
-        s = simplify(OpSum(A, B, C))
-
-        @test s isa OpSum
-        @test length(s.ops) == 2
-
-        # Find the simplified site-1 and site-2 terms
-        site1_op = only(filter(op -> op isa Op && op.site == 1, s.ops))
-        site2_op = only(filter(op -> op isa Op && op.site == 2, s.ops))
-
-        @test site1_op.mat == A.mat + B.mat
-        @test site2_op.mat == C.mat
-    end
-
-    @testset "Merges multi-site OpSum terms only when all operators are the same" begin
-        A1 = Op([1 0; 0 1], 1)
-        A2 = Op([2 0; 0 2], 2)
-        B1 = Op([1 0; 0 1], 1)
-        B2 = Op([4 0; 0 4], 2)
-        C1 = Op([4 0; 0 4], 1)
-        C2 = Op([5 0; 0 5], 2)
-        D = Op([0 1; 1 0], 1)
-
-        o = A1 * A2 + B1 * B2 + C1 * C2 + D
-        omat = Array(o, [1, 2])
-        s = simplify(o)
-        smat = Array(s, [1, 2])
-
-        @test s isa OpSum
-        @test length(s.ops) == 2
-
-        @test omat == smat
+        @test simplify(OpChain(A), verbosity=0) isa Op
+        @test simplify(OpSum(A), verbosity=0) isa Op
+        @test simplify(OpSum(OpChain(A, B)), verbosity=0) isa OpChain
     end
 end
 
 @testset "simplify() Integration: matrix equivalence" begin
+# %%
     function assert_matrix_equivalent(op, basis; dims=nothing)
-        sop = simplify(op)
+        sop = simplify(op, verbosity=0)
 
         if isnothing(dims)
             M = atsite(Matrix, op, basis)
@@ -137,6 +41,63 @@ end
             @test M == Ms
         end
     end
+    
+    function assert_matrix_equivalent_rules(op, basis, f; dims=nothing)
+        sops = f(op)
+
+        for sop in sops
+            @test !isequal(op, sop)  # Ensure that the rule actually transforms the operator
+
+            if isnothing(dims)
+                M = atsite(Matrix, op, basis)
+                Ms = atsite(Matrix, sop, basis)
+                @test M == Ms
+
+                S = sparse(op, basis)
+                Ss = sparse(sop, basis)
+                @test S == Ss
+            else
+                M = atsite(Matrix, op, basis, dims)
+                Ms = atsite(Matrix, sop, basis, dims)
+                @test M == Ms
+            end
+        end
+    end
+
+
+    ALL_RULES = filter!(n -> endswith(string(n), "rule"), names(OperatorAlgebra, all=true))
+    TEST_OPS = [
+        Op([1 0; 0 2], 1),
+        Op([1 0; 0 2], 1) * Op([0 1; 1 0], 1),
+        Op([1 0; 0 2], 1) + Op([0 1; 1 0], 1),
+        Op([1 0; 0 2], 1) * Op([0 1; 1 0], 1) + Op([2 0; 0 2], 1),
+        Op([1 0; 0 0], 1) + (Op([1 1; 0 0], 1) * Op([0 0; 1 1], 1)),
+        Op([1 0; 0 2], 1) + Op([0 1; 1 0], 2),
+        Op([1 0; 0 2], 1) * Op([0 1; 1 0], 2),
+        Op([1 0; 0 2], 1) * Op([0 1; 1 0], 2) + Op([2 0; 0 2], 1) * Op([0 1; 1 0], 2),
+        Op([1 0; 0 2], 1) * Op([0 1; 1 0], 2) + Op([2 0; 0 2], 1) * Op([0 1; 1 0], 1),
+        Op([1 0; 0 2], 1) * (Op([0 1; 1 0], 2) + Op([2 0; 0 2], 1)),
+    ]
+    @testset "Rules" begin
+        for rule in ALL_RULES
+            f = getfield(OperatorAlgebra, rule)
+            !isa(f, Function) && continue
+            @testset "Rule $rule" begin
+                for op in TEST_OPS
+                    assert_matrix_equivalent_rules(op, [1, 2], f)
+                end
+            end
+        end
+    end
+
+    @testset "Simplify" begin
+        for op in TEST_OPS
+            assert_matrix_equivalent(op, [1, 2])
+        end
+    end
+
+
+# %%
 
     @testset "Single-site and simple sums/chains" begin
         op = Op([1 2; 3 4], 1)

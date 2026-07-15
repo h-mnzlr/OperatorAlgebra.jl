@@ -1,187 +1,417 @@
+using DataStructures
+
 """
-    simplify(op::AbstractOp)
+    simplify(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1)
 
 Return a simplified version of the operator, e.g., by merging terms acting on the same sites. After the simplification the operator is also flattened,
 meaning that there is only a single top-level `OpSum` operator and all `OpChain` operators only contain `Op` operators.
 
 Specifically, two `Op` operators get simplified if they act on the same site, by merging their matrices. For `OpChain` operators, all consecutive factors acting on the same site get merged according to the semantics of `OpChain` (i.e., right-to-left multiplication in matrix form), but not when there are operators in-between because those might be subject to commutation relations (like fermions).
 For `OpSum` operators, all terms (single-site and multiple-site) get merged by summing their matrices only when all sites are the same.
+
+The simplification is driven by rewrite rules (see the rule interface below) in two
+stages: the always-improving `NORMALIZING_RULES` are applied greedily to a fixpoint,
+then the heuristic `SEARCH_RULES` (factoring, e.g. `A*B + A*C -> A*(B + C)`) are
+explored with a best-first search guided by `_scoring_function`, deduplicating
+structurally equal expressions. `nsteps` bounds the number of search expansions,
+`tablesize` the number of candidate expressions kept in the search frontier.
 """
-simplify(op::AbstractOp) = _simplify_rulestack(op)
-simplify(op::Op) = op  # Op's are as simple as can be
-simplify(oc::OpChain) = _simplify_rulestack(oc, [:TypeSimplifyRule, :SamesiteProductRule, :IdentityRule, :FlattenProductSumRule, :FlattenProductRule])
-simplify(oc::OpSum) = _simplify_rulestack(oc, [:TypeSimplifyRule, :ZeroRule, :AssociativitySimpleRule, :RecursionRule, :FlattenSumRule])
+simplify(op::AbstractOp; kwargs...) = _simplify_main_loop(op; kwargs...)
 
-_simplify_rulestack(op::TOp, rule_stack) where {TOp <: AbstractOp} = begin
-    while !isempty(rule_stack)
-        rule = pop!(rule_stack)
+# These shall be integers!
+const _SCORING_SUM_PENALTY = 1
+const _SCORING_CHAIN_PENALTY = 1
+const _SCORING_OPDIM_PENALTY = 1
+const _SCORING_NONZERO_PENALTY = 1
+const _SCORING_COMPLEX_PENALTY = 1
 
-        #@info "Applying rule $rule to operator of type $(typeof(op))"
-        op, add_rules = _apply_rule(op, Val(rule))
+_scoring_function(os::OpSum) = sum(_scoring_function(o) for o in os.ops; init=0) + length(os.ops) * _SCORING_SUM_PENALTY
+_scoring_function(oc::OpChain) = sum(_scoring_function(o) for o in oc.ops; init=0) + length(oc.ops) * _SCORING_CHAIN_PENALTY
+_scoring_function(op::Op) = sum(_scoring_function(v) for v in op.mat; init=0) + size(op.mat, 1) * _SCORING_OPDIM_PENALTY
+_scoring_function(v::Number) = Int(v != false) * _SCORING_NONZERO_PENALTY
+_scoring_function(v::Complex) = _scoring_function(real(v)) + _scoring_function(imag(v)) + _SCORING_COMPLEX_PENALTY
+_scoring_function(v) = 1  # generic fallback
 
-        # In case an operator changes type we want to resolve rules for the new operator on a deeper recursion
-        # level to keep type stability. In that case, we want to to skip further simplification on the current level.
-        # Anyways, if the operator type changes, the rulestack should be invalidated, so this is a decent fix.
-        op isa TOp || return op
+# --- helpers shared by the rules ----------------------------------------------
 
-        isnothing(add_rules) && continue
-        push!(rule_stack, add_rules...)
+# A zero single-site operator matrix-equivalent to the (zero) expression `op`,
+# or `nothing` if `op` contains no `Op` to take a site from.
+_zero_term(op::Op) = Op(zero(op.mat), op.site)
+_zero_term(op::Union{OpChain,OpSum}) = begin
+    for o in op.ops
+        z = _zero_term(o)
+        isnothing(z) || return z
     end
-    op
+    nothing
 end
 
-# IdentityRule removes as many identity factors from OpChain terms as possible. 
-# After removing identity factors an additional SamesiteProductRule has to be checked.
-_apply_rule(oc::OpChain, ::Val{:IdentityRule}) = begin
-    m = map(isone, oc.ops)
-
-    !any(m) && return oc, nothing
-    return OpChain(oc.ops[.!m]), [:SamesiteProductRule]
-end
-
-# SamesiteProductRule merges consecutive factors in OpChain terms acting on the same site.
-# After merginng an additional IdentityRule and subsequent SamesiteProductRule have to be checked.
-_apply_rule(oc::OpChain, ::Val{:SamesiteProductRule}) = begin
-    s_last = oc.ops[1].site
-    for i in 2:length(oc.ops)
-        s = oc.ops[i].site
-        if s == s_last
-            # merge with previous factor
-            merged_op = Op(oc.ops[i].mat * oc.ops[i - 1].mat, s)
-            return OpChain(oc.ops[1:(i - 2)]..., merged_op, oc.ops[(i + 1):end]...), [:IdentityRule, :SamesiteProductRule]
-        end
-        s_last = s
-    end
-    return oc, nothing
-end
-
-# FlattenProductRule flattens nested OpChain terms.
-_apply_rule(oc::OpChain, ::Val{:FlattenProductRule}) = begin
-    new_ops = Vector{AbstractOp}()
-    for o in oc.ops
-        if o isa OpChain
-            append!(new_ops, o.ops)
-        else
-            push!(new_ops, o)
-        end
-    end
-    OpChain(new_ops...), nothing
-end
-
-# FlattenProductSumRule flattens nested OpSum terms within OpChain.
-_apply_rule(oc::OpChain, ::Val{:FlattenProductSumRule}) = begin
-    new_ops = [OpChain{sitetype(oc), eltype(oc)}()]
-    for o in oc.ops
-        if o isa OpSum
-            new_ops = [no * term for no in new_ops, term in o.ops]
-        else
-            new_ops = [no * o for no in new_ops]
-        end
-    end
-
-    length(new_ops) == 1 && return only(new_ops), nothing
-
-    # need to start-off a simplification of the OpSum, as the previous simplification stack is invalidated
-    o = simplify(OpSum(new_ops...))
-
-    o, nothing
-end
-
-# RecursionRule applies simplification recursively to all terms. For now,
-# the only non-trivial objects with in RecursionRule are OpChain and OpSum,
-# which have recursive structure.
-_apply_rule(o, ::Val{:RecursionRule}) = o, nothing
-_apply_rule(op::OpChain, ::Val{:RecursionRule}) = begin
-    op = simplify(op)  # we may directly use simplify here because no feedback is necessary
-    op, nothing
-end
-_apply_rule(os::OpSum, ::Val{:RecursionRule}) = begin
-    ops = map(simplify, os.ops)
-    
-    display(ops)
-    OpSum(ops...), [:ZeroRule, :FlattenSumRule]
-end
-
-_apply_rule(os::OpSum, ::Val{:ZeroRule}) = begin
-    nonzero_ops = filter(!iszero, os.ops)
-    OpSum(nonzero_ops...), nothing
-end
-
-# FlattenSumRule flattens nested OpSum terms.
-_apply_rule(os::OpSum, ::Val{:FlattenSumRule}) = begin
-    new_ops = Vector{AbstractOp}()
-    for term in os.ops
-        if term isa OpSum
-            append!(new_ops, term.ops)
-        else
-            push!(new_ops, term)
-        end
-    end
-    OpSum(new_ops...), nothing
-end
+_chain_rest(ops) = length(ops) == 1 ? only(ops) : OpChain(ops)
 
 # Obtain scalar factor to scale one matrix into the other. If it is not possible return NaN.
 _scalar_factor(mat1, mat2) = begin
     m = .!(iszero.(mat1) .& iszero.(mat2))
+    any(m) || return NaN
 
     scalings = mat1[m] ./ mat2[m]
-    if all(y->isequal(y, scalings[1]), scalings)
+    if all(y -> isequal(y, scalings[1]), scalings)
         return first(scalings)
     else
         return NaN
     end
 end
 
-# AssociativityRule attempts to leverage associativity of operator chains to merge terms in an OpSum.
-# Assumes that OpSum terms are already flattened, i.e., every operator in the OpSum consists of Op's or chains of Op's.
-_apply_rule(os::OpSum{Tid,Tmat}, ::Val{:AssociativitySimpleRule}) where {Tid,Tmat} = begin
-    # Radix-sort like algorithm to group terms by their site pattern.
-    sites_op_map = Dict{Vector{Tid}, Vector{AbstractOp{Tid,Tmat}}}()
-    for o in os.ops
-        if o isa Op
-            s = [o.site]
-        else
-            s = [subo.site for subo in o.ops]
-        end
+# --- rules ---------------------------------------------------------------------
+# Every rule implements the unified interface
+#
+#     _some_rule(op::AbstractOp) -> Vector{AbstractOp}
+#
+# returning every expression obtainable by applying the rule exactly once to the
+# top node of `op` (only `_recursive_transform_rule` lifts rules into nested
+# subexpressions). Each returned expression must be matrix-equivalent to `op` and
+# structurally different from it, and each rule must provide a generic fallback
+# method returning an empty `AbstractOp[]`.
+#
+# Rules are grouped into two sets:
+#  - `NORMALIZING_RULES` never increase the score, so the engine applies them
+#    greedily to a fixpoint instead of searching over them.
+#  - `SEARCH_RULES` are heuristic (different applications exclude each other), so
+#    the engine explores them with a scored best-first search.
 
-        if haskey(sites_op_map, s)
-            push!(sites_op_map[s], o)
-        else
-            sites_op_map[s] = [o]
+# FlattenSumRule flattens one nested OpSum term into its parent OpSum.
+_flatten_sum_rule(_) = AbstractOp[]
+_flatten_sum_rule(os::OpSum) = begin
+    trafod_ops = AbstractOp[]
+    for (i, o) in enumerate(os.ops)
+        if o isa OpSum
+            push!(trafod_ops, OpSum(vcat(os.ops[1:i-1], o.ops, os.ops[i+1:end])))
         end
     end
-
-    # Check if operators with the same site patterns are actually mergeable, i.e., OpChains may
-    # only differ with their representation matrix on a single site. If this is fulfilled merge the operators.
-    new_ops = Vector{AbstractOp{Tid}}()
-    was_merged = false
-    for (s, ops) in sites_op_map
-        length(ops) == 1 && (push!(new_ops, only(ops)); continue)
-        length(s) == 1 && (push!(new_ops, Op(sum(o.mat for o in ops), only(s))); continue)
-
-        merging_matrix = ones(length(ops), length(ops))
-        for (i, o1) in enumerate(ops), (j, o2) in enumerate(ops)
-            o1 === o2 && continue
-            merging_matrix[i, j] = prod(_scalar_factor(sop1.mat, sop2.mat) for (sop1, sop2) in zip(o1.ops, o2.ops))
-        end
-
-        seen = Set{Int}()
-        for i in axes(merging_matrix, 1)
-            i in seen && continue
-            m = .!isnan.(merging_matrix[:, i]) 
-
-            push!(seen, findall(m)...)
-            push!(new_ops, sum(merging_matrix[m, i]) * ops[i])
-        end
-        was_merged = any(!isnan, merging_matrix)
-    end
-    rules = was_merged ? [:ZeroRule, :AssociativitySimpleRule] : nothing
-    OpSum(new_ops...), rules
+    trafod_ops
 end
 
-_apply_rule(oc::Union{OpChain,OpSum}, ::Val{:TypeSimplifyRule}) = begin
-    length(oc.ops) == 1 && return only(oc.ops), nothing
-    oc, nothing
+# FlattenProductRule flattens one nested OpChain factor into its parent OpChain.
+_flatten_product_rule(_) = AbstractOp[]
+_flatten_product_rule(oc::OpChain) = begin
+    trafod_ops = AbstractOp[]
+    for (i, o) in enumerate(oc.ops)
+        if o isa OpChain
+            push!(trafod_ops, OpChain(vcat(oc.ops[1:i-1], o.ops, oc.ops[i+1:end])))
+        end
+    end
+    trafod_ops
+end
+
+# IdentityRule removes identity factors from OpChain terms.
+_identity_rule(_) = AbstractOp[]
+_identity_rule(oc::OpChain) = begin
+    trafod_ops = AbstractOp[]
+    length(oc.ops) == 1 && return trafod_ops
+    for (i, o) in enumerate(oc.ops)
+        isone(o) && push!(trafod_ops, OpChain(vcat(oc.ops[1:i-1], oc.ops[i+1:end])))
+    end
+    trafod_ops
+end
+
+# ZeroProductRule collapses an OpChain with a zero factor to a zero operator.
+_zero_product_rule(_) = AbstractOp[]
+_zero_product_rule(oc::OpChain) = begin
+    (length(oc.ops) > 1 && any(iszero, oc.ops)) || return AbstractOp[]
+    z = _zero_term(oc)
+    isnothing(z) ? AbstractOp[] : AbstractOp[z]
+end
+
+# ZeroSumRule removes zero terms from OpSum terms.
+_zerosum_rule(_) = AbstractOp[]
+_zerosum_rule(os::OpSum) = begin
+    trafod_ops = AbstractOp[]
+    for (i, o) in enumerate(os.ops)
+        if iszero(o)
+            push!(trafod_ops, OpSum(vcat(os.ops[1:i-1], os.ops[i+1:end])))
+        end
+    end
+    trafod_ops
+end
+
+# SamesiteProductRule merges consecutive factors in OpChain terms acting on the same site
+# (right-to-left multiplication in matrix form).
+_samesite_product_rule(_) = AbstractOp[]
+_samesite_product_rule(oc::OpChain) = begin
+    trafod_ops = AbstractOp[]
+    for i in 2:length(oc.ops)
+        o1, o2 = oc.ops[i-1], oc.ops[i]
+        (o1 isa Op && o2 isa Op && isequal(o1.site, o2.site)) || continue
+
+        merged_op = Op(o2.mat * o1.mat, o1.site)
+        push!(trafod_ops, OpChain(vcat(oc.ops[1:i-2], [merged_op], oc.ops[i+1:end])))
+    end
+    trafod_ops
+end
+
+# SamesiteSumRule merges two single-site terms in an OpSum acting on the same site.
+_samesite_sum_rule(_) = AbstractOp[]
+_samesite_sum_rule(os::OpSum) = begin
+    trafod_ops = AbstractOp[]
+    for i in 1:length(os.ops)-1, j in i+1:length(os.ops)
+        o1, o2 = os.ops[i], os.ops[j]
+        (o1 isa Op && o2 isa Op && isequal(o1.site, o2.site)) || continue
+
+        merged_op = Op(o1.mat + o2.mat, o1.site)
+        push!(trafod_ops, OpSum(vcat(os.ops[1:i-1], [merged_op], os.ops[filter(!=(j), i+1:length(os.ops))])))
+    end
+    trafod_ops
+end
+
+# OptypeSimplificationRule unwraps singleton OpSum/OpChain wrappers.
+_optype_simplification_rule(_) = AbstractOp[]
+_optype_simplification_rule(os::OpSum) = length(os.ops) == 1 ? AbstractOp[only(os.ops)] : AbstractOp[]
+_optype_simplification_rule(oc::OpChain) = length(oc.ops) == 1 ? AbstractOp[only(oc.ops)] : AbstractOp[]
+
+# DistributeRule distributes one OpSum factor of an OpChain over the chain,
+# turning the chain into a sum of chains (the inverse of the associativity rules).
+_distribute_rule(_) = AbstractOp[]
+_distribute_rule(oc::OpChain) = begin
+    trafod_ops = AbstractOp[]
+    for (i, o) in enumerate(oc.ops)
+        if o isa OpSum
+            push!(trafod_ops, OpSum([OpChain(vcat(oc.ops[1:i-1], [term], oc.ops[i+1:end])) for term in o.ops]))
+        end
+    end
+    trafod_ops
+end
+
+# Associativity rule for OpChains in OpSums, left associativity, i.e., A*B + A*C -> A*(B+C),
+# allowing the shared factor to differ by a scalar.
+_associativity_left_rule(_) = AbstractOp[]
+_associativity_left_rule(os::OpSum) = begin
+    site_groups = Dict{Any,Vector{Int}}()
+    for (i, o) in enumerate(os.ops)
+        (o isa OpChain && length(o.ops) > 1 && first(o.ops) isa Op) || continue
+        push!(get!(site_groups, first(o.ops).site, Int[]), i)
+    end
+
+    trafod_ops = AbstractOp[]
+    for group in values(site_groups)
+        for x in 1:length(group)-1, y in x+1:length(group)
+            i, j = group[x], group[y]
+            o1, o2 = os.ops[i]::OpChain, os.ops[j]::OpChain
+            a1 = first(o1.ops)::Op
+            b1 = first(o2.ops)::Op
+
+            # o1 = a1 * a2 * ... * an
+            # o2 = b1 * b2 * ... * bm
+            # scalar = a1 / b1 ==> a1 = scalar * b1
+            # o1 + o2 = b1 * (scalar * a2 * ... * an + b2 * ... * bm)
+            scalar = _scalar_factor(a1.mat, b1.mat)
+            isfinite(scalar) || continue
+
+            rest1 = _chain_rest(o1.ops[2:end])
+            isone(scalar) || (rest1 = scalar * rest1)
+            merged_op = OpChain(b1, OpSum(rest1, _chain_rest(o2.ops[2:end])))
+
+            push!(trafod_ops, OpSum(vcat(os.ops[1:i-1], [merged_op], os.ops[filter(!=(j), i+1:length(os.ops))])))
+        end
+    end
+    trafod_ops
+end
+
+# Associativity rule for OpChains in OpSums, right associativity, i.e., B*A + C*A -> (B+C)*A,
+# allowing the shared factor to differ by a scalar.
+_associativity_right_rule(_) = AbstractOp[]
+_associativity_right_rule(os::OpSum) = begin
+    site_groups = Dict{Any,Vector{Int}}()
+    for (i, o) in enumerate(os.ops)
+        (o isa OpChain && length(o.ops) > 1 && last(o.ops) isa Op) || continue
+        push!(get!(site_groups, last(o.ops).site, Int[]), i)
+    end
+
+    trafod_ops = AbstractOp[]
+    for group in values(site_groups)
+        for x in 1:length(group)-1, y in x+1:length(group)
+            i, j = group[x], group[y]
+            o1, o2 = os.ops[i]::OpChain, os.ops[j]::OpChain
+            a1 = last(o1.ops)::Op
+            b1 = last(o2.ops)::Op
+
+            # o1 = an * ... * a2 * a1
+            # o2 = bm * ... * b2 * b1
+            # scalar = a1 / b1 ==> a1 = scalar * b1
+            # o1 + o2 = (scalar * an * ... * a2 + bm * ... * b2) * b1
+            scalar = _scalar_factor(a1.mat, b1.mat)
+            isfinite(scalar) || continue
+
+            rest1 = _chain_rest(o1.ops[1:end-1])
+            isone(scalar) || (rest1 = scalar * rest1)
+            merged_op = OpChain(OpSum(rest1, _chain_rest(o2.ops[1:end-1])), b1)
+
+            push!(trafod_ops, OpSum(vcat(os.ops[1:i-1], [merged_op], os.ops[filter(!=(j), i+1:length(os.ops))])))
+        end
+    end
+    trafod_ops
+end
+
+# RecursiveTransformRule lifts the search rules into nested subexpressions: it
+# returns the parent expression with one child replaced by one of its rewrites.
+_recursive_transform_rule(_) = AbstractOp[]
+_recursive_transform_rule(os::Top) where {Top<:Union{OpSum,OpChain}} = begin
+    trafod_ops = AbstractOp[]
+    for (i, o) in enumerate(os.ops)
+        for rule in ALL_SEARCH_RULES
+            for t in rule(o)
+                push!(trafod_ops, Top.name.wrapper(vcat(os.ops[1:i-1], [t], os.ops[i+1:end])))
+            end
+        end
+    end
+    trafod_ops
+end
+
+const NORMALIZING_RULES = (
+    _optype_simplification_rule,
+    _flatten_sum_rule,
+    _flatten_product_rule,
+    _zero_product_rule,
+    _zerosum_rule,
+    _identity_rule,
+    _samesite_product_rule,
+    _samesite_sum_rule,
+)
+const EXPANDING_RULES = (NORMALIZING_RULES..., _distribute_rule)
+const SEARCH_RULES = (_associativity_left_rule, _associativity_right_rule)
+const ALL_SEARCH_RULES = (SEARCH_RULES..., _recursive_transform_rule)
+
+# --- greedy rewriting engine ----------------------------------------------------
+# Applies a set of rules bottom-up until no rule matches anymore. `known` is an
+# optional identity-keyed cache of expressions already in normal form w.r.t.
+# `rules`; since rewrites share unchanged subterms, this avoids rescanning them.
+
+function _normalize(op::AbstractOp, rules; known=nothing)
+    isnothing(known) || !haskey(known, op) || return op
+
+    for _ in 1:100_000
+        op = _normalize_children(op, rules; known)
+
+        rewrite = nothing
+        for rule in rules
+            rewrites = rule(op)
+            isempty(rewrites) && continue
+            rewrite = first(rewrites)
+            break
+        end
+        if isnothing(rewrite)
+            isnothing(known) || (known[op] = nothing)
+            return op
+        end
+        op = rewrite
+    end
+    @warn "Normalization did not reach a fixpoint, returning the current expression"
+    op
+end
+
+_normalize_children(op::Op, rules; known=nothing) = op
+function _normalize_children(op::Top, rules; known=nothing) where {Top<:Union{OpSum,OpChain}}
+    newops = nothing  # copy-on-write, so untouched expressions keep their identity
+    for (i, o) in enumerate(op.ops)
+        no = _normalize(o, rules; known)
+        no === o && continue
+        isnothing(newops) && (newops = collect(AbstractOp, op.ops))
+        newops[i] = no
+    end
+    isnothing(newops) ? op : Top.name.wrapper(newops)
+end
+
+# --- best-first search over the search rules -------------------------------------
+
+# Structural hash used to deduplicate expressions during the search. Sums are
+# hashed order-insensitively so that permuted-but-equal sums collapse to one state.
+const _EKEY_OP_SALT = 0x2d1c9f5a63b8e047 % UInt
+const _EKEY_CHAIN_SALT = 0x7be0c3a591f2d846 % UInt
+const _EKEY_SUM_SALT = 0x94d0b8a7c15e3f62 % UInt
+
+_ekey(op::Op) = hash(op.mat, hash(op.site, _EKEY_OP_SALT))
+_ekey(oc::OpChain) = begin
+    h = _EKEY_CHAIN_SALT
+    for o in oc.ops
+        h = hash(_ekey(o), h)
+    end
+    h
+end
+_ekey(os::OpSum) = begin
+    s = zero(UInt)
+    for o in os.ops
+        s += _ekey(o)
+    end
+    hash(s, _EKEY_SUM_SALT)
+end
+
+# Score and key of a search state (a normalized expression). Both are assembled
+# from identity-keyed per-term caches: a rewrite shares all top-level terms with
+# its parent except the one it changed, so only that term is ever recomputed.
+_state_score(op::AbstractOp, cache) = get!(() -> _scoring_function(op), cache, op)
+_state_score(os::OpSum, cache) =
+    sum(get!(() -> _scoring_function(o), cache, o) for o in os.ops; init=0) + length(os.ops) * _SCORING_SUM_PENALTY
+
+_state_key(op::AbstractOp, cache) = get!(() -> _ekey(op), cache, op)
+_state_key(os::OpSum, cache) =
+    hash(sum(get!(() -> _ekey(o), cache, o) for o in os.ops; init=zero(UInt)), _EKEY_SUM_SALT)
+
+_simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = begin
+    known = IdDict{Any,Nothing}()       # expressions normal w.r.t. NORMALIZING_RULES
+    score_cache = IdDict{Any,Int}()
+    key_cache = IdDict{Any,UInt}()
+
+    # Seed with both the fully expanded form and the merely shrunk form, so an
+    # input that is already better factored than the search could recover is kept.
+    shrunk = _normalize(op, NORMALIZING_RULES; known)
+    expanded = _normalize(_normalize(shrunk, EXPANDING_RULES), NORMALIZING_RULES; known)
+    seeds = AbstractOp[expanded]
+    _state_key(shrunk, key_cache) == _state_key(expanded, key_cache) || push!(seeds, shrunk)
+
+    # The search table holds the retained states sorted by score. Expanded states
+    # stay in the table (flagged via the Ref), so they keep occupying table slots;
+    # once every retained state has been expanded the search has converged and
+    # stops, even if `nsteps` is not exhausted.
+    table = SortedMultiDict{Int,Tuple{AbstractOp,Ref{Bool}}}()
+    seen = Set{UInt}()
+    for s in seeds
+        insert!(table, _state_score(s, score_cache), (s, Ref(false)))
+        push!(seen, _state_key(s, key_cache))
+    end
+    best_score, (best, _) = first(table)
+
+    for step in 1:nsteps
+        # expand the best state that has not been expanded yet
+        st = nothing
+        tok = startof(table)
+        while tok != pastendsemitoken(table)
+            _, (o, checked) = deref((table, tok))
+            if !checked[]
+                checked[] = true
+                st = o
+                break
+            end
+            tok = advance((table, tok))
+        end
+        isnothing(st) && break  # converged
+        verbosity >= 1 && println(stderr, "Simplification step $step, table size: $(length(table)), best score: $best_score\r")
+
+        for rule in ALL_SEARCH_RULES, raw in rule(st)
+            cand = _normalize(raw, NORMALIZING_RULES; known)
+
+            key = _state_key(cand, key_cache)
+            key in seen && continue
+            push!(seen, key)
+
+            cand_score = _state_score(cand, score_cache)
+            if cand_score < best_score
+                best = cand
+                best_score = cand_score
+            end
+
+            insert!(table, cand_score, (cand, Ref(false)))
+            length(table) > tablesize && delete!((table, lastindex(table)))
+        end
+    end
+
+    best
 end
 
 

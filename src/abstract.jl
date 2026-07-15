@@ -52,6 +52,7 @@ _is_sortable(T) = hasmethod(isless, Tuple{T,T})
 
 # Default iszero implementation
 Base.iszero(op::AbstractOp) = false
+Base.isone(op::AbstractOp) = false
 
 # To construct zero and one we need to know the dimension of the matrix inside the operator, which is not possible from the type alone
 Base.zero(::Type{<:AbstractOp}) = error("Not enough information to construct zero from type $(typeof(op))")

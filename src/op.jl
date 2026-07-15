@@ -50,6 +50,7 @@ Base.adjoint(A::Op) = Op(adjoint(A.mat), A.site)
 Base.one(op::Op) = Op(LinearAlgebra.I(size(op.mat, 1)), op.site)
 Base.zero(op::Op) = Op(zero(op.mat), op.site)
 Base.iszero(A::Op) = iszero(A.mat)
+Base.isone(A::Op) = isone(A.mat)
 
 Base.isequal(A::Op) = B -> B isa Op && isequal(A.site, B.site) && isequal(A.mat, B.mat)
 
