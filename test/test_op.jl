@@ -50,96 +50,65 @@ end
 @testset "AbstractOp Inherited Methods" begin
     mat = [2 3; 4 5]
     op = Op(mat, 1)
-    
+
     @testset "one method" begin
         op_one = one(op)
         @test op_one.mat == I(2)
         @test op_one.site == op.site
         @test size(op_one.mat) == size(op.mat)
     end
-    
+
     @testset "zero method" begin
         op_zero = zero(op)
         @test op_zero.mat == zeros(2, 2)
         @test op_zero.site == op.site
         @test size(op_zero.mat) == size(op.mat)
     end
+
+    @testset "iszero and isone predicates" begin
+        @test iszero(zero(op))
+        @test !iszero(op)
+        @test iszero(Op([0 0; 0 0], 1))
+
+        @test isone(one(op))
+        @test !isone(op)
+        @test isone(Op([1 0; 0 1], 1))
+        @test !isone(Op([2 0; 0 2], 1))
+    end
 end
 
 @testset "Op Adjoint Tests" begin
-    @testset "Adjoint of real matrix" begin
-        mat = [1 2; 3 4]
-        op = Op(mat, 1)
-        
-        op_adj = adjoint(op)
-        
-        @test op_adj.mat == [1 3; 2 4]
-        @test op_adj.site == 1
-        @test op_adj isa Op{Int64, Int64}
+    @testset "Adjoint transposes and conjugates, preserves site and types" begin
+        real_adj = adjoint(Op([1 2; 3 4], 1))
+        @test real_adj isa Op{Int64, Int64}
+        @test real_adj.mat == [1 3; 2 4]
+        @test real_adj.site == 1
+
+        complex_adj = adjoint(Op([1+2im 3-im; 4+5im 6], :site_a))
+        @test complex_adj.mat == [1-2im 4-5im; 3+im 6]
+        @test complex_adj.site == :site_a
+
+        float_adj = adjoint(Op([1.0 2.0; 3.0 4.0], 1))
+        @test float_adj.mat == [1.0 3.0; 2.0 4.0]
+        @test eltype(float_adj.mat) == Float64
     end
-    
-    @testset "Adjoint of complex matrix" begin
-        mat = [1+2im 3-im; 4+5im 6]
-        op = Op(mat, 2)
-        
-        op_adj = adjoint(op)
-        
-        @test op_adj.mat == [1-2im 4-5im; 3+im 6]
-        @test op_adj.site == 2
-    end
-    
-    @testset "Adjoint preserves site" begin
-        op = Op([1 2; 3 4], :site_a)
-        op_adj = adjoint(op)
-        
-        @test op_adj.site == :site_a
-    end
-    
+
     @testset "Double adjoint returns to original" begin
         mat = [1 2; 3 4]
-        op = Op(mat, 1)
-        
-        op_adj_adj = adjoint(adjoint(op))
-        
+        op_adj_adj = adjoint(adjoint(Op(mat, 1)))
+
         @test op_adj_adj.mat == mat
-        @test op_adj_adj.site == op.site
+        @test op_adj_adj.site == 1
     end
-    
-    @testset "Adjoint of hermitian matrix" begin
+
+    @testset "Hermitian matrix is a fixed point" begin
         mat = [1 2+3im; 2-3im 4]
-        op = Op(mat, 1)
-        
-        op_adj = adjoint(op)
-        
-        @test op_adj.mat ≈ mat
+        @test adjoint(Op(mat, 1)).mat ≈ mat
     end
-    
-    @testset "Adjoint with Float matrices" begin
-        mat = [1.0 2.0; 3.0 4.0]
-        op = Op(mat, 1)
-        
-        op_adj = adjoint(op)
-        
-        @test op_adj.mat == [1.0 3.0; 2.0 4.0]
-        @test eltype(op_adj.mat) == Float64
-    end
-    
-    @testset "Adjoint of diagonal matrix" begin
-        mat = Diagonal([1+im, 2-im, 3])
-        op = Op(mat, 5)
-        
-        op_adj = adjoint(op)
-        
-        @test op_adj.mat == Diagonal([1-im, 2+im, 3])
-    end
-    
-    @testset "Adjoint of sparse matrix" begin
-        mat = sparse([1 2; 0 3])
-        op = Op(mat, 1)
-        
-        op_adj = adjoint(op)
-        
-        @test op_adj.mat == sparse([1 0; 2 3])
+
+    @testset "Special matrix types" begin
+        @test adjoint(Op(Diagonal([1+im, 2-im, 3]), 5)).mat == Diagonal([1-im, 2+im, 3])
+        @test adjoint(Op(sparse([1 2; 0 3]), 1)).mat == sparse([1 0; 2 3])
     end
 end
 

@@ -67,6 +67,6 @@ LinearMaps.LinearMap(os::OpSum{Tid}, basis::AbstractVector{Tid}) where {Tid} =
     sum(LinearMap(op, basis) for op in os.ops)
 
 LinearMaps.LinearMap(oc::OpChain{Tid}, basis::AbstractVector{Tid}) where {Tid} =
-    prod(LinearMap(op, basis) for op in reverse(oc.ops))
+    prod(LinearMap(op, basis) for op in oc.ops)
 
 LinearMaps.LinearMap(op::AbstractOp) = LinearMap(op, sites(op))

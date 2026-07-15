@@ -1,610 +1,213 @@
 using Test
 using LinearAlgebra
-using LinearMaps
+using LinearMaps: LinearMap
 using SparseArrays
 
 @testset "LinearMap Tests for Op" begin
-    @testset "Basic LinearMap creation for Op" begin
-        mat = [0 1; 1 0]
-        op = Op(mat, 1)
+    @testset "Matches the sparse construction on random vectors" begin
         basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        @test lm isa LinearMap
-        @test size(lm) == (4, 4)
+        for op in (Op(PAULI_X, 1), Op(PAULI_Y, 2), Op(PAULI_Z, 2), Op([1 2; 3 4], 1), Op([2 0; 0 3], 1))
+            lm = LinearMap(op, basis)
+            v = rand(ComplexF64, 4)
+            @test lm * v ≈ sparse(op, basis) * v
+        end
     end
-    
-    @testset "LinearMap for Op at first site" begin
-        σx = [0 1; 1 0]
-        op = Op(σx, 1)
+
+    @testset "Basis-state actions" begin
         basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        # Test on |00⟩ = [1,0,0,0]
-        v = [1, 0, 0, 0]
-        result = lm * v
-        @test result ≈ [0, 0, 1, 0]  # X⊗I|00⟩ = |10⟩
-    end
-    
-    @testset "LinearMap for Op at last site" begin
-        σx = [0 1; 1 0]
-        op = Op(σx, 2)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        # Test on |00⟩ = [1,0,0,0]
-        v = [1, 0, 0, 0]
-        result = lm * v
-        @test result ≈ [0, 1, 0, 0]  # I⊗X|00⟩ = |01⟩
-    end
-    
-    @testset "LinearMap for Op at middle site" begin
-        σx = [0 1; 1 0]
-        op = Op(σx, 2)
-        basis = [1, 2, 3]
-        
-        lm = LinearMap(op, basis)
-        
-        @test size(lm) == (8, 8)
-        
-        # Test on |000⟩ = [1,0,0,0,0,0,0,0]
+        @test LinearMap(Op(PAULI_X, 1), basis) * [1, 0, 0, 0] ≈ [0, 0, 1, 0]        # X⊗I|00⟩ = |10⟩
+        @test LinearMap(Op(PAULI_X, 2), basis) * [1, 0, 0, 0] ≈ [0, 1, 0, 0]        # I⊗X|00⟩ = |01⟩
+        @test LinearMap(Op(PAULI_X, 1), basis) * [0, 1, 0, 0] ≈ [0, 0, 0, 1]        # X⊗I|01⟩ = |11⟩
+        @test LinearMap(Op(PAULI_Y, 1), basis) * [1.0 + 0im, 0, 0, 0] ≈ [0, 0, 1im, 0]  # Y⊗I|00⟩ = i|10⟩
+        @test LinearMap(Op(PAULI_Z, 2), basis) * [0, 1, 0, 0] ≈ [0, -1, 0, 0]       # I⊗Z|01⟩ = -|01⟩
+
+        # middle site of three: I⊗X⊗I|000⟩ = |010⟩
+        lm = LinearMap(Op(PAULI_X, 2), [1, 2, 3])
         v = zeros(8)
         v[1] = 1
-        result = lm * v
-        # I⊗X⊗I|000⟩ = |010⟩
         expected = zeros(8)
-        expected[3] = 1  # |010⟩ is at index 3 (0-based: 010 = 2)
-        @test result ≈ expected
+        expected[3] = 1
+        @test lm * v ≈ expected
     end
-    
-    @testset "LinearMap with Pauli X" begin
-        op = Op([0 1; 1 0], 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        # |01⟩ = [0,1,0,0]
-        v = [0, 1, 0, 0]
-        result = lm * v
-        @test result ≈ [0, 0, 0, 1]  # X⊗I|01⟩ = |11⟩
-    end
-    
-    @testset "LinearMap with Pauli Y" begin
-        op = Op([0 -im; im 0], 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        # |00⟩
-        v = [1.0+0im, 0, 0, 0]
-        result = lm * v
-        @test result ≈ [0, 0, 1im, 0]  # Y⊗I|00⟩ = i|10⟩
-    end
-    
-    @testset "LinearMap with Pauli Z" begin
-        op = Op([1 0; 0 -1], 2)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        # |01⟩
-        v = [0, 1, 0, 0]
-        result = lm * v
-        @test result ≈ [0, -1, 0, 0]  # I⊗Z|01⟩ = -|01⟩
-    end
-    
-    @testset "LinearMap with custom dims" begin
-        mat = rand(3, 3)
-        op = Op(mat, 1)
-        basis = [1, 2]
-        dims = [3, 2]
-        
-        lm = LinearMap(op, basis, dims=dims)
-        
-        @test size(lm) == (6, 6)
-    end
-    
-    @testset "LinearMap with Symbol basis" begin
-        op = Op([0 1; 1 0], :a)
-        basis = [:a, :b]
-        
-        lm = LinearMap(op, basis)
-        
-        @test size(lm) == (4, 4)
-    end
-    
-    @testset "LinearMap with String basis" begin
-        op = Op([1 0; 0 -1], "site1")
-        basis = ["site1", "site2"]
-        
-        lm = LinearMap(op, basis)
-        
-        @test size(lm) == (4, 4)
-    end
-    
-    @testset "LinearMap site not in basis throws error" begin
-        op = Op([0 1; 1 0], 3)
-        basis = [1, 2]
-        
-        @test_throws ArgumentError LinearMap(op, basis)
-    end
-    
-    @testset "LinearMap for single site system" begin
-        op = Op([0 1; 1 0], 1)
-        basis = [1]
-        
-        lm = LinearMap(op, basis)
-        
-        @test size(lm) == (2, 2)
-        v = [1, 0]
-        @test lm * v ≈ [0, 1]
-    end
-    
-    @testset "LinearMap for large system" begin
-        op = Op([0 1; 1 0], 5)
-        basis = 1:10
-        
-        lm = LinearMap(op, basis)
-        
-        @test size(lm) == (1024, 1024)
-        @test lm isa LinearMap  # Should not allocate full matrix
-    end
-    
-    @testset "LinearMap preserves sparsity" begin
-        sparse_mat = sparse([1 0; 0 1])
-        op = Op(sparse_mat, 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        # LinearMap should handle sparse matrices efficiently
-        @test lm isa LinearMap
-    end
-    
-    @testset "LinearMap with diagonal matrix" begin
-        op = Op([2 0; 0 3], 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        v = [1, 0, 0, 0]
-        @test lm * v ≈ [2, 0, 0, 0]
-    end
-    
-    @testset "LinearMap multiple applications" begin
-        op = Op([0 1; 1 0], 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        v = [1, 0, 0, 0]
-        result1 = lm * v
-        result2 = lm * result1
-        
-        @test result2 ≈ v  # X² = I
-    end
-    
-    @testset "LinearMap adjoint" begin
-        op = Op([1 2; 3 4], 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        lm_adj = lm'
-        
-        @test lm_adj isa LinearMap
-        @test size(lm_adj) == size(lm)
-    end
-    
-    @testset "LinearMap with non-uniform dimensions" begin
-        mat = rand(3, 3)
-        op = Op(mat, 2)
-        basis = [1, 2, 3]
-        dims = [2, 3, 2]
-        
-        lm = LinearMap(op, basis, dims=dims)
-        
+
+    @testset "Sizes, bases and custom dims" begin
+        @test size(LinearMap(Op([0 1; 1 0], 1), [1])) == (2, 2)
+        @test size(LinearMap(Op([0 1; 1 0], :a), [:a, :b])) == (4, 4)
+        @test size(LinearMap(Op([1 0; 0 -1], "site1"), ["site1", "site2"])) == (4, 4)
+        @test size(LinearMap(Op(rand(3, 3), 1), [1, 2], dims=[3, 2])) == (6, 6)
+
+        lm = LinearMap(Op(rand(3, 3), 2), [1, 2, 3], dims=[2, 3, 2])
         @test size(lm) == (12, 12)
+        @test length(lm * rand(12)) == 12
+    end
+
+    @testset "Lazy for large systems" begin
+        lm = LinearMap(Op([0 1; 1 0], 5), 1:10)
+        @test lm isa LinearMap
+        @test size(lm) == (1024, 1024)
+    end
+
+    @testset "Sparse operator matrices are supported" begin
+        lm = LinearMap(Op(sparse([0 1; 1 0]), 1), [1, 2])
+        @test lm * [1, 0, 0, 0] ≈ [0, 0, 1, 0]
+    end
+
+    @testset "Site not in basis throws" begin
+        @test_throws ArgumentError LinearMap(Op([0 1; 1 0], 3), [1, 2])
+    end
+
+    @testset "Repeated application (X² = I)" begin
+        lm = LinearMap(Op([0 1; 1 0], 1), [1, 2])
+        v = [1, 0, 0, 0]
+        @test lm * (lm * v) ≈ v
+    end
+
+    @testset "Adjoint" begin
+        lm = LinearMap(Op([1 2; 3 4], 1), [1, 2])
+        v = rand(4)
+        w = rand(4)
+
+        @test lm' isa LinearMap
+        @test size(lm') == size(lm)
+        # ⟨w, Av⟩ = ⟨A†w, v⟩
+        @test dot(w, lm * v) ≈ dot(lm' * w, v)
+    end
+
+    @testset "Hermitian operator has real expectation values" begin
+        lm = LinearMap(Op([0 im; -im 0], 1), [1, 2])
+        v = rand(ComplexF64, 4)
+        @test imag(dot(v, lm * v)) ≈ 0 atol = 1e-10
     end
 end
 
 @testset "LinearMap Tests for OpSum" begin
-    @testset "LinearMap for OpSum with two operators" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opsum = OpSum(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        @test lm isa LinearMap
-        @test size(lm) == (4, 4)
+    basis = [1, 2]
+
+    @testset "Acts as the sum of its terms" begin
+        cases = [
+            OpSum(Op([1 0; 0 1], 1), Op([1 0; 0 1], 2)),
+            OpSum(Op(PAULI_X, 1), Op(PAULI_X, 2)),
+            OpSum(Op([1 0; 0 1], 1), Op([0 1; 1 0], 1)),  # same site
+            OpSum(Op([0 1; 1 0], 1)),                     # single term
+            OpSum(OpChain(Op(PAULI_X, 1), Op(PAULI_Z, 2)), Op([1 0; 0 1], 1)),  # chain term
+        ]
+        for opsum in cases
+            lm = LinearMap(opsum, basis)
+            v = rand(4)
+            @test lm * v ≈ sparse(opsum, basis) * v
+        end
     end
-    
-    @testset "LinearMap for OpSum applies as sum" begin
-        op1 = Op([1 0; 0 1], 1)  # I on site 1
-        op2 = Op([1 0; 0 1], 2)  # I on site 2
-        opsum = OpSum(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        v = [1, 0, 0, 0]
-        result = lm * v
+
+    @testset "Explicit basis-state actions" begin
         # (I⊗I + I⊗I)|00⟩ = 2|00⟩
-        @test result ≈ [2, 0, 0, 0]
-    end
-    
-    @testset "LinearMap for OpSum with Pauli operators" begin
-        op1 = Op([0 1; 1 0], 1)  # X on site 1
-        op2 = Op([0 1; 1 0], 2)  # X on site 2
-        opsum = OpSum(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        v = [1, 0, 0, 0]  # |00⟩
-        result = lm * v
+        lm = LinearMap(OpSum(Op([1 0; 0 1], 1), Op([1 0; 0 1], 2)), basis)
+        @test lm * [1, 0, 0, 0] ≈ [2, 0, 0, 0]
+
         # (X⊗I + I⊗X)|00⟩ = |10⟩ + |01⟩
-        @test result ≈ [0, 1, 1, 0]
+        lm = LinearMap(OpSum(Op(PAULI_X, 1), Op(PAULI_X, 2)), basis)
+        @test lm * [1, 0, 0, 0] ≈ [0, 1, 1, 0]
+
+        # ((I + X)⊗I)|00⟩ = |00⟩ + |10⟩
+        lm = LinearMap(OpSum(Op([1 0; 0 1], 1), Op([0 1; 1 0], 1)), basis)
+        @test lm * [1, 0, 0, 0] ≈ [1, 0, 1, 0]
+
+        # (Y⊗I + I⊗I)|00⟩ = |00⟩ + i|10⟩
+        lm = LinearMap(OpSum(Op(PAULI_Y, 1), Op([1 0; 0 1], 2)), basis)
+        @test lm * [1.0 + 0im, 0, 0, 0] ≈ [1, 0, 1im, 0]
     end
-    
-    @testset "LinearMap for OpSum with three operators" begin
-        op1 = Op([1 0; 0 0], 1)  # |0⟩⟨0| on site 1
-        op2 = Op([0 0; 0 1], 2)  # |1⟩⟨1| on site 2
-        op3 = Op([1 0; 0 1], 3)  # I on site 3
-        opsum = OpSum(op1, op2, op3)
-        basis = [1, 2, 3]
-        
-        lm = LinearMap(opsum, basis)
-        
-        @test size(lm) == (8, 8)
-    end
-    
-    @testset "LinearMap for OpSum with single operator" begin
-        op = Op([0 1; 1 0], 1)
-        opsum = OpSum(op)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        v = [1, 0, 0, 0]
-        result = lm * v
-        @test result ≈ [0, 0, 1, 0]
-    end
-    
-    @testset "LinearMap for OpSum with operators on same site" begin
-        op1 = Op([1 0; 0 1], 1)  # I
-        op2 = Op([0 1; 1 0], 1)  # X
-        opsum = OpSum(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        v = [1, 0, 0, 0]
-        result = lm * v
-        # (I + X)⊗I|00⟩ = |00⟩ + |10⟩
-        @test result ≈ [1, 0, 1, 0]
-    end
-    
-    @testset "LinearMap for OpSum with complex coefficients" begin
-        op1 = Op([0 -im; im 0], 1)  # Y
-        op2 = Op([1 0; 0 1], 2)     # I
-        opsum = OpSum(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        v = [1.0+0im, 0, 0, 0]
-        result = lm * v
-        @test result ≈ [1, 0, 1im, 0]
-    end
-    
-    @testset "LinearMap for OpSum with Symbol basis" begin
-        op1 = Op([1 0; 0 1], :a)
-        op2 = Op([0 1; 1 0], :b)
-        opsum = OpSum(op1, op2)
-        basis = [:a, :b]
-        
-        lm = LinearMap(opsum, basis)
-        
-        @test size(lm) == (4, 4)
-    end
-    
-    @testset "LinearMap for OpSum is lazy" begin
-        # Create large system to verify no full matrix allocation
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([1 0; 0 -1], 5)
-        opsum = OpSum(op1, op2)
-        basis = 1:10
-        
-        lm = LinearMap(opsum, basis)
-        
+
+    @testset "Symbol basis and laziness" begin
+        opsum = OpSum(Op([1 0; 0 1], :a), Op([0 1; 1 0], :b))
+        @test size(LinearMap(opsum, [:a, :b])) == (4, 4)
+
+        big = OpSum(Op([0 1; 1 0], 1), Op([1 0; 0 -1], 5))
+        lm = LinearMap(big, 1:10)
         @test lm isa LinearMap
         @test size(lm) == (1024, 1024)
-    end
-    
-    @testset "LinearMap for OpSum multiple applications" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opsum = OpSum(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        v = [1, 0, 0, 0]
-        result = lm * (lm * v)
-        
-        @test result isa Vector
     end
 end
 
 @testset "LinearMap Tests for OpChain" begin
-    @testset "LinearMap for OpChain with two operators" begin
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([0 1; 1 0], 2)
-        chain = OpChain(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        
-        @test lm isa LinearMap
-        @test size(lm) == (4, 4)
+    basis = [1, 2]
+
+    @testset "Acts as the chain's matrix (agrees with sparse)" begin
+        cases = [
+            OpChain(Op(PAULI_X, 1), Op(PAULI_X, 2)),
+            OpChain(Op(PAULI_X, 1), Op(PAULI_Z, 2)),
+            OpChain(Op(PAULI_X, 1), Op(PAULI_Z, 1)),        # non-commuting, same site
+            OpChain(Op([1 2; 0 1], 1), Op([1 0; 3 1], 1)),  # order-sensitive
+            OpChain(Op(PAULI_Y, 1), Op(PAULI_X, 2)),        # complex
+            OpChain(Op([0 1; 1 0], 1)),                     # single factor
+        ]
+        for chain in cases
+            lm = LinearMap(chain, basis)
+            v = rand(ComplexF64, 4)
+            @test lm * v ≈ sparse(chain, basis) * v
+        end
     end
-    
-    @testset "LinearMap for OpChain applies in correct order" begin
-        op1 = Op([0 1; 1 0], 1)  # X on site 1
-        op2 = Op([1 0; 0 -1], 2)  # Z on site 2
-        chain = OpChain(op1, op2)
-        basis = [1, 2]
-        
+
+    @testset "Rightmost factor is applied first" begin
+        # chain [X, Z] on the same site is the matrix X*Z: Z first, then X.
+        chain = OpChain(Op([0 1; 1 0], 1), Op([1 0; 0 -1], 1))
         lm = LinearMap(chain, basis)
-        
-        v = [1, 0, 0, 0]  # |00⟩
-        result = lm * v
-        # Chain applies op2 then op1: (X⊗I)(I⊗Z)|00⟩ = X⊗Z|00⟩ = |10⟩
-        @test result ≈ [0, 0, 1, 0]
+
+        # X(Z|00⟩) = X|00⟩ = |10⟩
+        @test lm * [1, 0, 0, 0] ≈ [0, 0, 1, 0]
+
+        # reversed chain [Z, X]: Z(X|00⟩) = Z|10⟩ = -|10⟩
+        reversed = OpChain(Op([1 0; 0 -1], 1), Op([0 1; 1 0], 1))
+        @test LinearMap(reversed, basis) * [1, 0, 0, 0] ≈ [0, 0, -1, 0]
     end
-    
-    @testset "LinearMap for OpChain with single operator" begin
-        op = Op([0 1; 1 0], 1)
-        chain = OpChain(op)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        
+
+    @testset "X² = I on a state" begin
+        lm = LinearMap(OpChain(Op([0 1; 1 0], 1), Op([0 1; 1 0], 1)), basis)
         v = [1, 0, 0, 0]
-        result = lm * v
-        @test result ≈ [0, 0, 1, 0]
+        @test lm * v ≈ v
     end
-    
-    @testset "LinearMap for OpChain with three operators" begin
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([0 1; 1 0], 3)
-        chain = OpChain(op1, op2, op3)
-        basis = [1, 2, 3]
-        
+
+    @testset "Nested OpChain" begin
+        inner = OpChain(Op([0 1; 1 0], 1), Op([0 1; 1 0], 2))
+        chain = OpChain(inner, Op([1 0; 0 -1], 1))
+
         lm = LinearMap(chain, basis)
-        
-        @test size(lm) == (8, 8)
-    end
-    
-    @testset "LinearMap for OpChain on same site" begin
-        op1 = Op([0 1; 1 0], 1)  # X
-        op2 = Op([0 1; 1 0], 1)  # X
-        chain = OpChain(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        
-        v = [1, 0, 0, 0]
-        result = lm * v
-        # X²⊗I = I⊗I
-        @test result ≈ v
-    end
-    
-    @testset "LinearMap for OpChain: non-commuting operators" begin
-        op1 = Op([0 1; 1 0], 1)      # X
-        op2 = Op([1 0; 0 -1], 1)     # Z
-        chain = OpChain(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        
-        v = [1, 0, 0, 0]  # |00⟩
-        result = lm * v
-        # ZX|00⟩ = Z|10⟩ = -|10⟩
-        @test result ≈ [0, 0, -1, 0]
-    end
-    
-    @testset "LinearMap for OpChain with complex matrices" begin
-        op1 = Op([0 -im; im 0], 1)  # Y
-        op2 = Op([0 1; 1 0], 2)     # X
-        chain = OpChain(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        
-        v = [1.0+0im, 0, 0, 0]
-        result = lm * v
-        # (Y⊗I)(I⊗X)|00⟩ = Y⊗X|00⟩ = i|11⟩
-        @test result ≈ [0, 0, 0, 1im]
-    end
-    
-    @testset "LinearMap for OpChain with Symbol basis" begin
-        op1 = Op([0 1; 1 0], :a)
-        op2 = Op([1 0; 0 -1], :b)
-        chain = OpChain(op1, op2)
-        basis = [:a, :b]
-        
-        lm = LinearMap(chain, basis)
-        
-        @test size(lm) == (4, 4)
-    end
-    
-    @testset "LinearMap for nested OpChain" begin
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([0 1; 1 0], 2)
-        chain1 = OpChain(op1, op2)
-        op3 = Op([1 0; 0 -1], 1)
-        chain2 = OpChain(chain1, op3)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain2, basis)
-        
+        v = rand(4)
+
         @test lm isa LinearMap
-        @test size(lm) == (4, 4)
+        @test lm * v ≈ sparse(chain, basis) * v
     end
-    
-    @testset "LinearMap for OpChain is lazy" begin
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([1 0; 0 -1], 5)
-        chain = OpChain(op1, op2)
-        basis = 1:10
-        
-        lm = LinearMap(chain, basis)
-        
+
+    @testset "Symbol basis and laziness" begin
+        chain = OpChain(Op([0 1; 1 0], :a), Op([1 0; 0 -1], :b))
+        @test size(LinearMap(chain, [:a, :b])) == (4, 4)
+
+        big = OpChain(Op([0 1; 1 0], 1), Op([1 0; 0 -1], 5))
+        lm = LinearMap(big, 1:10)
         @test lm isa LinearMap
         @test size(lm) == (1024, 1024)
     end
-    
-    @testset "LinearMap for OpChain preserves operator order" begin
-        # Create operators that don't commute
-        op1 = Op([1 2; 0 1], 1)
-        op2 = Op([1 0; 3 1], 1)
-        chain = OpChain(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        
-        v = [1, 0, 0, 0]
-        result = lm * v
-        
-        # Verify against sparse implementation
-        expected = sparse(chain, basis) * v
-        
-        @test result ≈ expected
-    end
-    
-    @testset "LinearMap for OpChain empty chain" begin
-        chain = OpChain()
-        basis = [1, 2]
 
-        @test_throws MethodError LinearMap(chain, basis)
+    @testset "Empty OpChain throws" begin
+        @test_throws MethodError LinearMap(OpChain(), [1, 2])
     end
 end
 
 @testset "LinearMap Integration Tests" begin
-    @testset "Consistency between Op and sparse" begin
-        op = Op([0 1; 1 0], 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        sparse_mat = sparse(op, basis)
-        
-        v = rand(4)
-        @test lm * v ≈ sparse_mat * v
-    end
-    
-    @testset "Consistency between OpSum and sparse" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opsum = OpSum(op1, op2)
-        basis = [1, 2]
-        
+    @testset "Mixed OpSum of chains and ops" begin
+        chain = OpChain(Op([0 1; 1 0], 1), Op([1 0; 0 -1], 2))
+        opsum = OpSum(chain, Op([0 -im; im 0], 3))
+        basis = [1, 2, 3]
+
         lm = LinearMap(opsum, basis)
-        sparse_mat = sparse(opsum, basis)
-        
-        v = rand(4)
-        @test lm * v ≈ sparse_mat * v
-    end
-    
-    @testset "Consistency between OpChain and sparse" begin
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([1 0; 0 -1], 2)
-        chain = OpChain(op1, op2)
-        basis = [1, 2]
-        
-        lm = LinearMap(chain, basis)
-        sparse_mat = sparse(chain, basis)
-        
-        v = rand(4)
-        @test lm * v ≈ sparse_mat * v
-    end
-    
-    @testset "LinearMap composition with OpSum and OpChain" begin
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([1 0; 0 -1], 2)
-        chain = OpChain(op1, op2)
-        op3 = Op([1 0; 0 1], 1)
-        opsum = OpSum(chain, op3)
-        basis = [1, 2]
-        
-        lm = LinearMap(opsum, basis)
-        
-        @test lm isa LinearMap
-        v = rand(4)
-        result = lm * v
-        @test length(result) == 4
+        v = rand(ComplexF64, 8)
+
+        @test size(lm) == (8, 8)
+        @test lm * v ≈ sparse(opsum, basis) * v
     end
 
-    @testset "Multiple operator types in one system" begin
-        op1 = Op([0 1; 1 0], 1)
-        op2 = Op([1 0; 0 -1], 2)
-        op3 = Op([0 -im; im 0], 3)
-        
-        chain = OpChain(op1, op2)
-        opsum = OpSum(chain, op3)
-        basis = [1, 2, 3]
-        
-        lm = LinearMap(opsum, basis)
-        
-        @test lm isa LinearMap
-        @test size(lm) == (8, 8)
-    end
-    
-    @testset "LinearMap with custom dims consistency" begin
-        mat = rand(3, 3)
-        op = Op(mat, 2)
-        basis = [1, 2, 3]
-        dims = [2, 3, 2]
-        
-        lm = LinearMap(op, basis, dims=dims)
-        
-        # Total dimension should be 2*3*2 = 12
+    @testset "Custom dims consistency" begin
+        lm = LinearMap(Op(rand(3, 3), 2), [1, 2, 3], dims=[2, 3, 2])
+
         @test size(lm) == (12, 12)
-        
-        v = rand(12)
-        result = lm * v
-        @test length(result) == 12
-    end
-    
-    @testset "Adjoint consistency" begin
-        op = Op([1 2; 3 4], 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        v = rand(4)
-        w = rand(4)
-        
-        # Test ⟨w, Av⟩ = ⟨A†w, v⟩
-        @test dot(w, lm * v) ≈ dot(lm' * w, v)
-    end
-    
-    @testset "Hermitian operator" begin
-        σy = [0 im; -im 0]
-        op = Op(σy, 1)
-        basis = [1, 2]
-        
-        lm = LinearMap(op, basis)
-        
-        v = rand(ComplexF64, 4)
-        
-        # For Hermitian operator: ⟨v, Av⟩ should be real
-        @test imag(dot(v, lm * v)) ≈ 0 atol=1e-10
+        @test length(lm * rand(12)) == 12
     end
 end

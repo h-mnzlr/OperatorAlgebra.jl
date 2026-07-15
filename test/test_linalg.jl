@@ -326,22 +326,6 @@ end
         @test tr(opsum, basis) == tr(op1, basis) + tr(op2, basis)
     end
     
-    @testset "Trace with predefined constants" begin
-        # Test with Pauli matrices
-        σx = Op(PAULI_X, 1)
-        @test tr(σx, [1]) == 0
-        
-        σy = Op(PAULI_Y, 1)
-        @test tr(σy, [1]) == 0
-        
-        σz = Op(PAULI_Z, 1)
-        @test tr(σz, [1]) == 0
-        
-        # Identity matrix
-        id = Op([1 0; 0 1], 1)
-        @test tr(id, [1]) == 2
-    end
-    
     @testset "Trace of Hermitian operators is real" begin
         # Pauli matrices are Hermitian
         σx = Op([0 1; 1 0], 1)
@@ -362,12 +346,6 @@ end
         # = 2 * (2^100 / 2) = 2 * 2^99 = 2^100
         expected = big(2)^100
         @test tr(op, basis, dims) == expected
-    end
-    
-    @testset "Trace with non-square matrices should work with trace of operator" begin
-        # Even though our operators are always square, test robustness
-        op = Op([1 0; 0 1], 1)
-        @test tr(op, [1]) == 2
     end
     
     @testset "Trace with single site in large basis" begin

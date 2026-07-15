@@ -2,142 +2,82 @@ using Test
 using LinearAlgebra
 
 @testset "OpChain Constructor Tests" begin
-    @testset "Basic Constructor with two operators on different sites" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        
-        opchain = OpChain(op1, op2)
-        
-        @test length(opchain.ops) == 2
-        @test opchain.ops[1].mat == op1.mat
-        @test opchain.ops[2].mat == op2.mat
-        @test opchain isa OpChain{Int64, Int64}
-    end
-    
-    @testset "Constructor with single operator" begin
-        op = Op([1 2; 3 4], 1)
-        opchain = OpChain(op)
-        
-        @test length(opchain.ops) == 1
-        @test opchain.ops[1].mat == op.mat
-        @test opchain isa OpChain{Int64, Int64}
-    end
-    
-    @testset "Base.one and Base.zero" begin
-        # @test one(OpChain) == OpChain()
-        # @test zero(OpChain) == OpChain(zero(Op))
-    end
-    
-    @testset "Constructor with three operators" begin
+    @testset "Vararg constructor collects operators" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([0 1; 1 0], 2)
         op3 = Op([1 1; 1 1], 3)
-        
+
         opchain = OpChain(op1, op2, op3)
-        
+
+        @test opchain isa OpChain{Int64,Int64}
         @test length(opchain.ops) == 3
-        @test opchain isa OpChain{Int64, Int64}
+        @test opchain.ops[1].mat == op1.mat
+        @test opchain.ops[2].mat == op2.mat
+
+        @test length(OpChain(op1).ops) == 1
     end
-    
-    @testset "Constructor with Float matrices" begin
-        op1 = Op([1.0 0.0; 0.0 1.0], 1)
-        op2 = Op([0.0 1.0; 1.0 0.0], 2)
-        
-        opchain = OpChain(op1, op2)
-        
-        @test opchain isa OpChain{Int64, Float64}
-        @test length(opchain.ops) == 2
+
+    @testset "Type parameter promotion" begin
+        id_int = [1 0; 0 1]
+        # (description, op1, op2, expected concrete type)
+        cases = [
+            ("Float matrices", Op([1.0 0.0; 0.0 1.0], 1), Op([0.0 1.0; 1.0 0.0], 2), OpChain{Int64,Float64}),
+            ("Complex matrices", Op([1.0+0im 0.0; 0.0 1.0], 1), Op([0.0 1.0+0im; 1.0 0.0], 2), OpChain{Int64,ComplexF64}),
+            ("Int and Float matrices", Op(id_int, 1), Op([0.0 1.0; 1.0 0.0], 2), OpChain{Int64,Float64}),
+            ("Float and Complex matrices", Op([1.0 0.0; 0.0 1.0], 1), Op([0.0+0im 1.0; 1.0 0.0], 2), OpChain{Int64,ComplexF64}),
+            ("Int8 and Int64 matrices/sites", Op(Int8[1 0; 0 1], Int8(1)), Op(Int64[0 1; 1 0], Int64(2)), OpChain{Int64,Int64}),
+            ("Int and Float sites", Op(id_int, 1), Op(id_int, 2.0), OpChain{Float64,Int64}),
+            ("Symbol sites", Op(id_int, :a), Op(id_int, :b), OpChain{Symbol,Int64}),
+            ("String sites", Op([1.0 0.0; 0.0 1.0], "site1"), Op([0.0 1.0; 1.0 0.0], "site2"), OpChain{String,Float64}),
+        ]
+        for (desc, op1, op2, T) in cases
+            @testset "$desc" begin
+                @test OpChain(op1, op2) isa T
+            end
+        end
     end
-    
-    @testset "Constructor with Complex matrices" begin
-        op1 = Op([1.0+0im 0.0; 0.0 1.0], 1)
-        op2 = Op([0.0 1.0+0im; 1.0 0.0], 2)
-        
-        opchain = OpChain(op1, op2)
-        
-        @test opchain isa OpChain{Int64, ComplexF64}
-    end
-    
-    @testset "Constructor with mixed site ID types (Int and Float)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2.0)
-        
-        opchain = OpChain(op1, op2)
-        
-        # Tid should be promoted to Float64
-        @test opchain isa OpChain{Float64, Int64}
-        @test length(opchain.ops) == 2
-    end
-    
-    @testset "Constructor with Symbol site IDs" begin
-        op1 = Op([1 0; 0 1], :a)
-        op2 = Op([0 1; 1 0], :b)
-        
-        opchain = OpChain(op1, op2)
-        
-        @test opchain isa OpChain{Symbol, Int64}
-    end
-    
-    @testset "Constructor with String site IDs" begin
-        op1 = Op([1.0 0.0; 0.0 1.0], "site1")
-        op2 = Op([0.0 1.0; 1.0 0.0], "site2")
-        
-        opchain = OpChain(op1, op2)
-        
-        @test opchain isa OpChain{String, Float64}
-    end
-    
-    @testset "Constructor with mixed matrix element types (Int and Float)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0.0 1.0; 1.0 0.0], 2)
-        
-        opchain = OpChain(op1, op2)
-        
-        # Tmat should be promoted to Float64
-        @test opchain isa OpChain{Int64, Float64}
-    end
-    
-    @testset "Constructor with mixed matrix element types (Float and Complex)" begin
-        op1 = Op([1.0 0.0; 0.0 1.0], 1)
-        op2 = Op([0.0+0im 1.0; 1.0 0.0], 2)
-        
-        opchain = OpChain(op1, op2)
-        
-        # Tmat should be promoted to ComplexF64
-        @test opchain isa OpChain{Int64, ComplexF64}
-    end
-    
-    @testset "Constructor with many operators on different sites" begin
-        ops = [Op(rand(3, 3), i) for i in 1:10]
-        opchain = OpChain(ops...)
-        
-        @test length(opchain.ops) == 10
-        @test opchain isa OpChain{Int64, Float64}
-    end
-    
-    @testset "Type promotion with multiple Int types" begin
-        op1 = Op([Int8(1) Int8(0); Int8(0) Int8(1)], Int8(1))
-        op2 = Op([Int64(0) Int64(1); Int64(1) Int64(0)], Int64(2))
-        
-        opchain = OpChain(op1, op2)
-        
-        # Both Tid and Tmat should be promoted to Int64
-        @test opchain isa OpChain{Int64, Int64}
-    end
-    
-    @testset "Constructor preserves operator data after conversion" begin
+
+    @testset "Operator data is preserved through conversion" begin
         op1 = Op([1 2; 3 4], 1)
         op2 = Op([5.0 6.0; 7.0 8.0], 2)
-        
+
         opchain = OpChain(op1, op2)
-        
-        # First operator converted to Float64
+
         @test opchain.ops[1].mat == [1.0 2.0; 3.0 4.0]
         @test opchain.ops[1].site == 1
-        
-        # Second operator preserved
         @test opchain.ops[2].mat == [5.0 6.0; 7.0 8.0]
         @test opchain.ops[2].site == 2
+    end
+
+    @testset "Many operators" begin
+        ops = [Op(rand(3, 3), i) for i in 1:10]
+        opchain = OpChain(ops...)
+
+        @test length(opchain.ops) == 10
+        @test opchain isa OpChain{Int64,Float64}
+    end
+end
+
+@testset "OpChain zero/one Predicate Tests" begin
+    A = Op([1 2; 3 4], 1)
+    B = Op([0 1; 1 0], 2)
+    chain = OpChain(A, B)
+
+    @testset "one and zero constructors" begin
+        @test isone(one(chain))
+        @test iszero(zero(chain))
+    end
+
+    @testset "iszero: any zero factor annihilates the product" begin
+        @test iszero(OpChain(A, zero(B)))
+        @test iszero(OpChain(zero(A), B))
+        @test !iszero(chain)
+    end
+
+    @testset "isone: all factors must be identities" begin
+        @test isone(OpChain(one(A), one(B)))
+        @test !isone(OpChain(A, one(B)))
+        @test !isone(chain)
     end
 end
 
@@ -145,615 +85,217 @@ end
     factor_count(op::Op) = 1
     factor_count(oc::OpChain) = sum(factor_count, oc.ops)
 
-    @testset "Op * Op (same site)" begin
-        op1 = Op([1 2; 3 4], 1)
-        op2 = Op([5 6; 7 8], 1)
-        
-        result = op1 * op2
-        
-        @test result isa OpChain{Int64, Int64}
-        @test length(result.ops) == 2
-        @test result.ops[1].mat == [1 2; 3 4]
-        @test result.ops[1].site == 1
-        @test result.ops[2].mat == [5 6; 7 8]
-        @test result.ops[2].site == 1
+    op1 = Op([1 0; 0 1], 1)
+    op2 = Op([0 1; 1 0], 2)
+    op3 = Op([1 1; 1 1], 3)
+    op4 = Op([2 2; 2 2], 4)
+
+    @testset "Op * Op keeps both factors (no merging)" begin
+        same_site = Op([1 2; 3 4], 1) * Op([5 6; 7 8], 1)
+
+        @test same_site isa OpChain{Int64,Int64}
+        @test length(same_site.ops) == 2
+        @test same_site.ops[1].mat == [1 2; 3 4]
+        @test same_site.ops[2].mat == [5 6; 7 8]
+
+        different_sites = op1 * op2
+        @test different_sites isa OpChain{Int64,Int64}
+        @test length(different_sites.ops) == 2
     end
-    
-    @testset "Op * Op (different sites)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        
-        result = op1 * op2
-        
-        @test result isa OpChain{Int64, Int64}
-        @test length(result.ops) == 2
+
+    @testset "Zero factors make the chain zero but are not dropped" begin
+        zero2(site) = Op([0 0; 0 0], site)
+        cases = [
+            ("zero left", zero2(1) * Op([1 2; 3 4], 2)),
+            ("zero right", Op([1 2; 3 4], 1) * zero2(2)),
+            ("zero on same site", zero2(1) * Op([1 2; 3 4], 1)),
+            ("both zero", zero2(1) * zero2(2)),
+            ("zero in the middle", op1 * zero2(2) * op3),
+            ("zero at the end", op1 * op2 * zero2(3)),
+        ]
+        for (desc, result) in cases
+            @testset "$desc" begin
+                @test result isa OpChain
+                @test iszero(result)
+                @test all(op -> op isa Op, result.ops)
+            end
+        end
+
+        # element type of zero results follows the inputs
+        @test eltype(Op([0.0 0.0; 0.0 0.0], 1) * Op([1.0 2.0; 3.0 4.0], 2)) == Float64
+        @test eltype(Op([0.0+0im 0.0; 0.0 0.0], 1) * Op([1.0+1im 2.0; 3.0 4.0], 2)) == ComplexF64
     end
-    
-    @testset "Op * Op with zero matrix (left)" begin
-        op_zero = Op([0 0; 0 0], 1)
-        op_nonzero = Op([1 2; 3 4], 2)
-        
-        result = op_zero * op_nonzero
-        
+
+    @testset "Chain products flatten and preserve all factors" begin
+        result = OpChain(op1, op2) * OpChain(op3, op4)
+
         @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 2
-        @test factor_count(result) == 2
-    end
-    
-    @testset "Op * Op with zero matrix (right)" begin
-        op_nonzero = Op([1 2; 3 4], 1)
-        op_zero = Op([0 0; 0 0], 2)
-        
-        result = op_nonzero * op_zero
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 2
-        @test factor_count(result) == 2
-    end
-    
-    @testset "Op * Op with both zero matrices" begin
-        op_zero1 = Op([0 0; 0 0], 1)
-        op_zero2 = Op([0 0; 0 0], 2)
-        
-        result = op_zero1 * op_zero2
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 2
-        @test factor_count(result) == 2
-    end
-    
-    @testset "Op * Op with zero matrix (same site)" begin
-        op_zero = Op([0 0; 0 0], 1)
-        op_nonzero = Op([1 2; 3 4], 1)
-        
-        result = op_zero * op_nonzero
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 2
-        @test factor_count(result) == 2
-    end
-    
-    @testset "OpChain * OpChain (all different sites)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        op4 = Op([2 2; 2 2], 4)
-        
-        chain1 = OpChain(op1, op2)
-        chain2 = OpChain(op3, op4)
-        
-        result = chain1 * chain2
-        
-        @test result isa OpChain
-        @test length(result.ops) == 4
-        @test all(op -> op isa Op, result.ops)
         @test factor_count(result) == 4
+        @test all(op -> op isa Op, result.ops)
         @test Set(sites(result)) == Set([1, 2, 3, 4])
+
+        # overlapping sites are still not merged
+        overlapping = OpChain(op1, op2) * OpChain(op3, Op([2 0; 0 2], 2))
+        @test factor_count(overlapping) == 4
+        @test Set(sites(overlapping)) == Set([1, 2, 3])
     end
-    
-    @testset "OpChain * OpChain with site overlap (no simplification)" begin
-        # chain1: sites 1, 2
-        # chain2: sites 2, 3
-        # result is flattened (still no simplification)
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        op4 = Op([2 0; 0 2], 2)
-        
-        chain1 = OpChain(op1, op2)
-        chain2 = OpChain(op3, op4)
-        
-        result = chain1 * chain2
-        
+
+    @testset "OpChain * Op and Op * OpChain" begin
+        grow_right = OpChain(op1, op2) * op3
+        @test factor_count(grow_right) == 3
+        @test grow_right.ops[3].site == 3
+
+        grow_left = op1 * OpChain(op2, op3)
+        @test factor_count(grow_left) == 3
+        @test grow_left.ops[1].site == 1
+
+        # existing site: still no merging
+        same_site = OpChain(op1, op2) * Op([2 0; 0 2], 1)
+        @test factor_count(same_site) == 3
+        @test Set(sites(same_site)) == Set([1, 2])
+    end
+
+    @testset "Chained multiplications" begin
+        result = op1 * op2 * Op([1 1; 1 1], 1) * op4
+
         @test result isa OpChain
-        @test length(result.ops) == 4
-        @test all(op -> op isa Op, result.ops)
         @test factor_count(result) == 4
-        @test Set(sites(result)) == Set([1, 2, 3])
+        @test Set(sites(result)) == Set([1, 2, 4])
+
+        assoc1 = (op1 * op2) * op3
+        assoc2 = op1 * (op2 * op3)
+        @test factor_count(assoc1) == factor_count(assoc2)
+        @test sites(assoc1) == sites(assoc2)
     end
-    
-    @testset "OpChain * Op on new site" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        
-        opchain = OpChain(op1, op2)
-        result = opchain * op3
-        
-        @test result isa OpChain
-        @test length(result.ops) == 3
-        @test all(op -> op isa Op, result.ops)
-        @test factor_count(result) == 3
-        @test 3 in sites(result)
-    end
-    
-    @testset "OpChain * Op with zero matrix" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op_zero = Op([0 0; 0 0], 3)
-        
-        opchain = OpChain(op1, op2)
-        result = opchain * op_zero
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 3
-        @test factor_count(result) == 3
-    end
-    
-    @testset "OpChain * Op on existing site (no simplification)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([2 0; 0 2], 1)  # Same site as op2
-        
-        opchain = OpChain(op1, op2)
-        result = opchain * op3
-        
-        @test result isa OpChain
-        @test length(result.ops) == 3
-        @test factor_count(result) == 3
-        @test Set(sites(result)) == Set([1, 2])
-    end
-    
-    @testset "Op * OpChain on new site" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        
-        opchain = OpChain(op2, op3)
-        result = op1 * opchain
-        
-        @test result isa OpChain
-        @test length(result.ops) == 3
-        @test result.ops[1] isa Op
-        @test result.ops[2] isa Op
-        @test result.ops[3] isa Op
-        @test factor_count(result) == 3
-        @test 1 in sites(result)
-    end
-    
-    @testset "Op * OpChain with zero matrix" begin
-        op_zero = Op([0 0; 0 0], 1)
-        op2 = Op([1 0; 0 1], 2)
-        op3 = Op([0 1; 1 0], 3)
-        
-        opchain = OpChain(op2, op3)
-        result = op_zero * opchain
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 3
-        @test factor_count(result) == 3
-    end
-    
-    @testset "Op * OpChain on existing site (no simplification)" begin
-        op1 = Op([2 0; 0 2], 1)
-        op2 = Op([1 0; 0 1], 2)  # Same site as op1
-        op3 = Op([0 1; 1 0], 1)
-        
-        opchain = OpChain(op2, op3)
-        result = op1 * opchain
-        
-        @test result isa OpChain
-        @test length(result.ops) == 3
-        @test factor_count(result) == 3
-        @test Set(sites(result)) == Set([1, 2])
-    end
-    
-    @testset "Multiple multiplications create OpChain (no simplification)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 1)  # Same site as op1
-        op4 = Op([2 2; 2 2], 3)
-        
-        result = op1 * op2 * op3 * op4
-        
-        @test result isa OpChain
-        @test length(result.ops) == 4
-        @test factor_count(result) == 4
-        @test Set(sites(result)) == Set([1, 2, 3])
-    end
-    
-    @testset "Multiple multiplications with zero matrix (early)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op_zero = Op([0 0; 0 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        
-        result = op1 * op_zero * op3
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 3
-        @test factor_count(result) == 3
-    end
-    
-    @testset "Multiple multiplications with zero matrix (late)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op_zero = Op([0 0; 0 0], 3)
-        
-        result = op1 * op2 * op_zero
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test length(result.ops) == 3
-        @test factor_count(result) == 3
-    end
-    
-    @testset "Op * Op with Float zero matrix" begin
-        op_zero = Op([0.0 0.0; 0.0 0.0], 1)
-        op_nonzero = Op([1.0 2.0; 3.0 4.0], 2)
-        
-        result = op_zero * op_nonzero
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test eltype(result) == Float64
-        @test length(result.ops) == 2
-        @test factor_count(result) == 2
-    end
-    
-    @testset "Op * Op with Complex zero matrix" begin
-        op_zero = Op([0.0+0.0im 0.0; 0.0 0.0], 1)
-        op_nonzero = Op([1.0+1.0im 2.0; 3.0 4.0], 2)
-        
-        result = op_zero * op_nonzero
-        
-        @test result isa OpChain
-        @test iszero(result)
-        @test eltype(result) == ComplexF64
-        @test length(result.ops) == 2
-        @test factor_count(result) == 2
-    end
-    
-    @testset "Multiplication with type promotion (Float)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0.0 1.0; 1.0 0.0], 2)
-        
-        result = op1 * op2
-        
-        @test result isa OpChain{Int64, Float64}
-    end
-    
-    @testset "Associativity of OpChain multiplication" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        
-        result1 = (op1 * op2) * op3
-        result2 = op1 * (op2 * op3)
-        
-        @test factor_count(result1) == factor_count(result2)
-        @test Set(sites(result1)) == Set(sites(result2))
+
+    @testset "Multiplication promotes types" begin
+        @test (op1 * Op([0.0 1.0; 1.0 0.0], 2)) isa OpChain{Int64,Float64}
     end
 end
 
 @testset "OpChain Scalar Multiplication Tests" begin
-    @testset "Scalar * OpChain (left multiplication)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opchain = OpChain(op1, op2)
-        
-        result = 3 * opchain
-        
-        @test length(result.ops) == 2
-        # Scalar is applied to first operator only (s*A)*B = s*(A*B)
-        @test result.ops[1].mat == [3 0; 0 3]
-        @test result.ops[1].site == 1
-        @test result.ops[2].mat == [0 1; 1 0]
-        @test result.ops[2].site == 2
+    op1 = Op([1 0; 0 1], 1)
+    op2 = Op([0 1; 1 0], 2)
+
+    @testset "Scalar is absorbed into the first factor" begin
+        for result in (3 * OpChain(op1, op2), OpChain(op1, op2) * 3)
+            @test result.ops[1].mat == [3 0; 0 3]
+            @test result.ops[2].mat == [0 1; 1 0]
+        end
     end
-    
-    @testset "OpChain * Scalar (right multiplication)" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opchain = OpChain(op1, op2)
-        
-        result = opchain * 3
-        
-        @test length(result.ops) == 2
-        @test result.ops[1].mat == [3 0; 0 3]
-        @test result.ops[1].site == 1
-        @test result.ops[2].mat == [0 1; 1 0]
-        @test result.ops[2].site == 2
-    end
-    
-    @testset "Float scalar * OpChain" begin
-        op1 = Op([1.0 0.0; 0.0 1.0], 1)
-        op2 = Op([0.0 1.0; 1.0 0.0], 2)
-        opchain = OpChain(op1, op2)
-        
-        result = 2.5 * opchain
-        
-        @test result.ops[1].mat ≈ [2.5 0.0; 0.0 2.5]
-        @test result.ops[2].mat ≈ [0.0 1.0; 1.0 0.0]
-    end
-    
-    @testset "Complex scalar * OpChain" begin
-        op1 = Op([1.0 0.0; 0.0 1.0], 1)
-        opchain = OpChain(op1)
-        
-        result = (1 + 2im) * opchain
-        
-        @test result.ops[1].mat == [(1+2im) 0; 0 (1+2im)]
-    end
-    
-    @testset "Zero scalar * OpChain" begin
-        op1 = Op([1 2; 3 4], 1)
-        op2 = Op([5 6; 7 8], 2)
-        opchain = OpChain(op1, op2)
-        
-        result = 0 * opchain
-        
-        @test result.ops[1].mat == [0 0; 0 0]
-        @test result.ops[2].mat == [5 6; 7 8]
-    end
-    
-    @testset "Negative scalar * OpChain" begin
-        op1 = Op([1 0; 0 1], 1)
-        opchain = OpChain(op1)
-        
-        result = -1 * opchain
-        
-        @test result.ops[1].mat == [-1 0; 0 -1]
+
+    @testset "Float, complex, negative and zero scalars" begin
+        @test (2.5 * OpChain(Op([1.0 0.0; 0.0 1.0], 1))).ops[1].mat ≈ [2.5 0.0; 0.0 2.5]
+        @test ((1 + 2im) * OpChain(op1)).ops[1].mat == [1+2im 0; 0 1+2im]
+        @test (-1 * OpChain(op1)).ops[1].mat == [-1 0; 0 -1]
+
+        zeroed = 0 * OpChain(Op([1 2; 3 4], 1), Op([5 6; 7 8], 2))
+        @test zeroed.ops[1].mat == [0 0; 0 0]
+        @test zeroed.ops[2].mat == [5 6; 7 8]
+        @test iszero(zeroed)
     end
 end
 
 @testset "OpChain Conversion Tests" begin
-    @testset "Convert OpChain to different matrix type" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opchain = OpChain(op1, op2)
-        
-        # Convert to Float64
-        converted = convert(OpChain{Int64, Float64}, opchain)
-        
-        @test converted isa OpChain{Int64, Float64}
+    opchain = OpChain(Op([1 0; 0 1], 1), Op([0 1; 1 0], 2))
+
+    @testset "Matrix element type conversion" begin
+        converted = convert(OpChain{Int64,Float64}, opchain)
+
+        @test converted isa OpChain{Int64,Float64}
         @test converted.ops[1].mat == [1.0 0.0; 0.0 1.0]
         @test converted.ops[2].mat == [0.0 1.0; 1.0 0.0]
     end
-    
-    @testset "Convert OpChain with site ID type change" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opchain = OpChain(op1, op2)
-        
-        # Convert to Float64 site IDs
-        converted = convert(OpChain{Float64, Int64}, opchain)
-        
-        @test converted isa OpChain{Float64, Int64}
+
+    @testset "Site ID type conversion" begin
+        converted = convert(OpChain{Float64,Int64}, opchain)
+
+        @test converted isa OpChain{Float64,Int64}
         @test converted.ops[1].site == 1.0
         @test converted.ops[2].site == 2.0
     end
-    
-    @testset "Convert OpChain to Complex" begin
-        op1 = Op([1.0 0.0; 0.0 1.0], 1)
-        op2 = Op([0.0 1.0; 1.0 0.0], 2)
-        opchain = OpChain(op1, op2)
-        
-        converted = convert(OpChain{Int64, ComplexF64}, opchain)
-        
-        @test converted isa OpChain{Int64, ComplexF64}
+
+    @testset "Conversion to complex element type" begin
+        converted = convert(OpChain{Int64,ComplexF64}, OpChain(Op([1.0 0.0; 0.0 1.0], 1)))
+
+        @test converted isa OpChain{Int64,ComplexF64}
         @test converted.ops[1].mat == [1.0+0im 0.0; 0.0 1.0+0im]
     end
 end
 
 @testset "OpChain Display Tests" begin
-    @testset "Show OpChain with two operators" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        opchain = OpChain(op1, op2)
-        
-        str = sprint(show, opchain)
-        @test occursin("OpChain(ops=[", str)
-        @test occursin("])", str)
-        @test occursin(", ", str)  # separator between operators
-    end
-    
-    @testset "Show OpChain with single operator" begin
-        op = Op([1 2; 3 4], 1)
-        opchain = OpChain(op)
-        
-        str = sprint(show, opchain)
-        @test occursin("OpChain(ops=[", str)
-        @test occursin("])", str)
-    end
-    
-    @testset "Show OpChain with many operators" begin
-        ops = [Op(rand(2, 2), i) for i in 1:5]
-        opchain = OpChain(ops...)
-        
-        str = sprint(show, opchain)
-        @test occursin("OpChain(ops=[", str)
-    end
+    opchain = OpChain(Op([1 0; 0 1], 1), Op([0 1; 1 0], 2))
+    str = sprint(show, opchain)
+
+    @test occursin("OpChain(ops=[", str)
+    @test occursin("])", str)
+    @test occursin(", ", str)  # separator between operators
 end
 
 @testset "OpChain Edge Cases" begin
-    @testset "OpChain with identity operators" begin
-        id1 = Op(Matrix{Float64}(I, 2, 2), 1)
-        id2 = Op(Matrix{Float64}(I, 2, 2), 2)
-        
-        opchain = OpChain(id1, id2)
-        
-        @test length(opchain.ops) == 2
-        # Order is preserved
-        @test opchain.ops[1].mat == I(2)
-        @test opchain.ops[1].site == 1
-        @test opchain.ops[2].mat == I(2)
-        @test opchain.ops[2].site == 2
-    end
-    
-    @testset "OpChain with different sized matrices" begin
+    @testset "Order and sizes are preserved" begin
         op1 = Op([1 0; 0 1], 1)
         op2 = Op([1 0 0; 0 1 0; 0 0 1], 2)
-        
+
         opchain = OpChain(op1, op2)
-        
-        # Order is preserved
+
         @test size(opchain.ops[1].mat) == (2, 2)
         @test opchain.ops[1].site == 1
         @test size(opchain.ops[2].mat) == (3, 3)
         @test opchain.ops[2].site == 2
     end
-    
-    @testset "Large OpChain with all different sites" begin
-        ops = [Op(rand(5, 5), i) for i in 1:100]
-        opchain = OpChain(ops...)
-        
-        @test length(opchain.ops) == 100
-    end
-    
-    @testset "Large OpChain with repeated sites (no simplification)" begin
-        # 50 operators, with repeated sites
-        ops = [Op(rand(3, 3), mod(i-1, 10) + 1) for i in 1:50]
-        opchain = OpChain(ops...)
-        
-        # All 50 operators are preserved (no automatic simplification)
-        @test length(opchain.ops) == 50
-        @test all(op isa Op for op in opchain.ops)
-    end
-    
-    @testset "OpChain stores only Op objects" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        
-        opchain = OpChain(op1, op2)
-        
-        # Verify all stored operators are Op, not other AbstractOp types
-        @test all(op isa Op for op in opchain.ops)
+
+    @testset "Large chains, repeated sites are not simplified" begin
+        distinct = OpChain([Op(rand(5, 5), i) for i in 1:100]...)
+        @test length(distinct.ops) == 100
+
+        repeated = OpChain([Op(rand(3, 3), mod(i - 1, 10) + 1) for i in 1:50]...)
+        @test length(repeated.ops) == 50
+        @test all(op isa Op for op in repeated.ops)
     end
 end
 
 @testset "OpChain Adjoint Tests" begin
-    @testset "Adjoint of OpChain with two operators" begin
-        op1 = Op([1 2; 3 4], 1)
-        op2 = Op([5 6; 7 8], 2)
-        opchain = OpChain(op1, op2)
-        
-        opchain_adj = adjoint(opchain)
-        
-        @test opchain_adj isa OpChain{Int64, Int64}
-        @test length(opchain_adj.ops) == 2
-        # Order should be reversed
-        @test opchain_adj.ops[1].mat == adjoint([5 6; 7 8])
+    @testset "Adjoint reverses order and conjugates each factor: (AB)† = B†A†" begin
+        A = [1+im 2; 3 4-im]
+        B = [5+2im 6; 7 8-3im]
+
+        opchain_adj = adjoint(OpChain(Op(A, 1), Op(B, 2)))
+
+        @test opchain_adj isa OpChain{Int64,Complex{Int64}}
+        @test opchain_adj.ops[1].mat == adjoint(B)
         @test opchain_adj.ops[1].site == 2
-        @test opchain_adj.ops[2].mat == adjoint([1 2; 3 4])
+        @test opchain_adj.ops[2].mat == adjoint(A)
         @test opchain_adj.ops[2].site == 1
     end
-    
-    @testset "Adjoint reverses operator order" begin
-        op1 = Op([1 0; 0 1], 1)
-        op2 = Op([0 1; 1 0], 2)
-        op3 = Op([1 1; 1 1], 3)
-        opchain = OpChain(op1, op2, op3)
-        
-        opchain_adj = adjoint(opchain)
-        
-        @test opchain_adj.ops[1].site == 3
-        @test opchain_adj.ops[2].site == 2
-        @test opchain_adj.ops[3].site == 1
-    end
-    
-    @testset "Adjoint with complex matrices" begin
-        op1 = Op([1+im 2; 3 4-im], 1)
-        op2 = Op([5+2im 6; 7 8-3im], 2)
-        opchain = OpChain(op1, op2)
-        
-        opchain_adj = adjoint(opchain)
-        
-        @test opchain_adj.ops[1].mat == [5-2im 7; 6 8+3im]
-        @test opchain_adj.ops[2].mat == [1-im 3; 2 4+im]
-    end
-    
-    @testset "Double adjoint returns to original order" begin
-        op1 = Op([1 2; 3 4], 1)
-        op2 = Op([5 6; 7 8], 2)
-        op3 = Op([9 10; 11 12], 3)
-        opchain = OpChain(op1, op2, op3)
-        
+
+    @testset "Double adjoint returns to original" begin
+        opchain = OpChain(Op([1 2; 3 4], 1), Op([5 6; 7 8], 2), Op([9 10; 11 12], 3))
+
         opchain_adj_adj = adjoint(adjoint(opchain))
-        
-        @test opchain_adj_adj.ops[1].site == 1
-        @test opchain_adj_adj.ops[2].site == 2
-        @test opchain_adj_adj.ops[3].site == 3
+
+        @test [op.site for op in opchain_adj_adj.ops] == [1, 2, 3]
         @test opchain_adj_adj.ops[1].mat == [1 2; 3 4]
         @test opchain_adj_adj.ops[2].mat == [5 6; 7 8]
         @test opchain_adj_adj.ops[3].mat == [9 10; 11 12]
     end
-    
-    @testset "Adjoint with single operator" begin
-        op = Op([1 2; 3 4], 1)
-        opchain = OpChain(op)
-        
-        opchain_adj = adjoint(opchain)
-        
-        @test length(opchain_adj.ops) == 1
-        @test opchain_adj.ops[1].mat == [1 3; 2 4]
-    end
-    
-    @testset "Adjoint preserves type parameters" begin
-        op1 = Op([1.0 2.0; 3.0 4.0], 1)
-        op2 = Op([5.0 6.0; 7.0 8.0], 2)
-        opchain = OpChain(op1, op2)
-        
-        opchain_adj = adjoint(opchain)
-        
-        @test opchain_adj isa OpChain{Int64, Float64}
-    end
-    
-    @testset "Adjoint of hermitian operator chain" begin
-        # Create a chain that's hermitian: A† B† = (BA)†
-        mat = [1 2+3im; 2-3im 4]
-        op1 = Op(mat, 1)
-        op2 = Op(mat, 2)
-        opchain = OpChain(op1, op2)
-        
-        opchain_adj = adjoint(opchain)
-        
-        # Verify reversal and adjoint
-        @test opchain_adj.ops[1].site == 2
-        @test opchain_adj.ops[2].site == 1
-    end
-    
+
     @testset "Adjoint with many operators" begin
         ops = [Op(rand(ComplexF64, 2, 2), i) for i in 1:10]
-        opchain = OpChain(ops...)
-        
-        opchain_adj = adjoint(opchain)
-        
+
+        opchain_adj = adjoint(OpChain(ops...))
+
         @test length(opchain_adj.ops) == 10
         for i in 1:10
-            @test opchain_adj.ops[i].site == 11 - i  # Reversed order
+            @test opchain_adj.ops[i].site == 11 - i  # reversed order
             @test opchain_adj.ops[i].mat ≈ adjoint(ops[11-i].mat)
         end
     end
-    
+
     @testset "Adjoint with Symbol site IDs" begin
-        op1 = Op([1 2; 3 4], :a)
-        op2 = Op([5 6; 7 8], :b)
-        opchain = OpChain(op1, op2)
-        
-        opchain_adj = adjoint(opchain)
-        
+        opchain_adj = adjoint(OpChain(Op([1 2; 3 4], :a), Op([5 6; 7 8], :b)))
+
         @test opchain_adj.ops[1].site == :b
         @test opchain_adj.ops[2].site == :a
-    end
-    
-    @testset "Adjoint mathematical property: (AB)† = B†A†" begin
-        A = [1 2; 3 4]
-        B = [5 6; 7 8]
-        op1 = Op(A, 1)
-        op2 = Op(B, 2)
-        opchain = OpChain(op1, op2)
-        
-        opchain_adj = adjoint(opchain)
-        
-        # Verify B† comes first, then A†
-        @test opchain_adj.ops[1].mat == adjoint(B)
-        @test opchain_adj.ops[2].mat == adjoint(A)
     end
 end

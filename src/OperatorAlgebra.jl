@@ -22,7 +22,8 @@ acting on tensor product spaces, with support for:
 - [`atsite`](@ref): Extend operator to full Hilbert space
 - `sparse`: Convert to sparse matrix representation
 - `LinearMap`: Create matrix-free representation
-- [`⊗`](@ref), [`kronpow`](@ref): Tensor product operations
+- [`kronpow`](@ref): Kronecker powers; [`⊗`](@ref) (an alias for `kron`) is available as
+  `OperatorAlgebra.⊗` — it is not exported to avoid clashing with `LinearMaps.⊗`
 
 # Predefined Operators
 Common quantum operators are exported as constants:
@@ -58,7 +59,7 @@ using LinearAlgebra, SparseArrays
 using LinearMaps
 
 export AbstractOp, Op, OpChain, OpSum
-export ⊗, kronpow, atsite
+export kronpow, atsite
 export sites, simplify, normal_order, commutator
 
 export PAULI_X, PAULI_Y, PAULI_Z, SPIN_X, SPIN_Y, SPIN_Z, I2, RAISE, LOWER, OCC_PART, OCC_HOLE

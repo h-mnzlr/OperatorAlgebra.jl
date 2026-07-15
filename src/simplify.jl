@@ -6,7 +6,7 @@ using DataStructures
 Return a simplified version of the operator, e.g., by merging terms acting on the same sites. After the simplification the operator is also flattened,
 meaning that there is only a single top-level `OpSum` operator and all `OpChain` operators only contain `Op` operators.
 
-Specifically, two `Op` operators get simplified if they act on the same site, by merging their matrices. For `OpChain` operators, all consecutive factors acting on the same site get merged according to the semantics of `OpChain` (i.e., right-to-left multiplication in matrix form), but not when there are operators in-between because those might be subject to commutation relations (like fermions).
+Specifically, two `Op` operators get simplified if they act on the same site, by merging their matrices. For `OpChain` operators, all consecutive factors acting on the same site get merged according to the semantics of `OpChain` (i.e., `OpChain([A, B])` is the matrix product `A*B`, so the rightmost factor acts on a state first), but not when there are operators in-between because those might be subject to commutation relations (like fermions).
 For `OpSum` operators, all terms (single-site and multiple-site) get merged by summing their matrices only when all sites are the same.
 
 The simplification is driven by rewrite rules (see the rule interface below) in two
@@ -132,8 +132,8 @@ _zerosum_rule(os::OpSum) = begin
     trafod_ops
 end
 
-# SamesiteProductRule merges consecutive factors in OpChain terms acting on the same site
-# (right-to-left multiplication in matrix form).
+# SamesiteProductRule merges consecutive factors in OpChain terms acting on the same site.
+# OpChain([A, B]) represents the matrix product A*B (the rightmost factor acts first).
 _samesite_product_rule(_) = AbstractOp[]
 _samesite_product_rule(oc::OpChain) = begin
     trafod_ops = AbstractOp[]
@@ -141,7 +141,7 @@ _samesite_product_rule(oc::OpChain) = begin
         o1, o2 = oc.ops[i-1], oc.ops[i]
         (o1 isa Op && o2 isa Op && isequal(o1.site, o2.site)) || continue
 
-        merged_op = Op(o2.mat * o1.mat, o1.site)
+        merged_op = Op(o1.mat * o2.mat, o1.site)
         push!(trafod_ops, OpChain(vcat(oc.ops[1:i-2], [merged_op], oc.ops[i+1:end])))
     end
     trafod_ops
@@ -372,7 +372,7 @@ _simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = beg
     table = SortedMultiDict{Int,Tuple{AbstractOp,Ref{Bool}}}()
     seen = Set{UInt}()
     for s in seeds
-        insert!(table, _state_score(s, score_cache), (s, Ref(false)))
+        push!(table, _state_score(s, score_cache) => (s, Ref(false)))
         push!(seen, _state_key(s, key_cache))
     end
     best_score, (best, _) = first(table)
@@ -380,7 +380,7 @@ _simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = beg
     for step in 1:nsteps
         # expand the best state that has not been expanded yet
         st = nothing
-        tok = startof(table)
+        tok = firstindex(table)
         while tok != pastendsemitoken(table)
             _, (o, checked) = deref((table, tok))
             if !checked[]
@@ -406,7 +406,7 @@ _simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = beg
                 best_score = cand_score
             end
 
-            insert!(table, cand_score, (cand, Ref(false)))
+            push!(table, cand_score => (cand, Ref(false)))
             length(table) > tablesize && delete!((table, lastindex(table)))
         end
     end

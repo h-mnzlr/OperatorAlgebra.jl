@@ -5,6 +5,9 @@ A product (chain) of operators representing non-commutative multiplication.
 
 An `OpChain` is created automatically when multiplying operators together. It represents
 the product O₁ × O₂ × ... × Oₙ, where the order matters for non-commuting operators.
+As in ordinary operator products, the rightmost factor Oₙ acts on a state first; all
+conversions (`apply`, `atsite`, `sparse`, `LinearMap`) and `simplify` follow this
+convention.
 
 # Fields
 - `ops::Vector{<:AbstractOp{Tid,Tmat}}`: Vector of operators in the product
@@ -26,10 +29,10 @@ Create an operator chain from multiple operators. Types are automatically promot
 σz = Op(PAULI_Z, 3)
 chain = σx * σy * σz  # Creates OpChain automatically
 
-# Operators on the same site are merged
+# Operators on the same site are kept as separate factors
 op1 = Op([1 0; 0 2], 1)
 op2 = Op([2 0; 0 1], 1)
-merged = op1 * op2  # Single Op with matrix multiplication
+chain2 = op1 * op2  # OpChain with two factors; merge explicitly with simplify
 
 # Adjoint reverses order
 chain' == σz' * σy' * σx'  # true

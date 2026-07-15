@@ -25,7 +25,9 @@ function _apply_op(o::Op, states)
     nstates
 end
 function _apply_op(oc::OpChain, states)
-    for o in oc.ops
+    # OpChain([A, B]) is the matrix product A*B: apply the rightmost factor first,
+    # consistent with apply/atsite/sparse/LinearMap.
+    for o in reverse(oc.ops)
         states = _apply_op(o, states)
     end
     states

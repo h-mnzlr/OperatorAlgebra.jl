@@ -4,6 +4,10 @@
 
 Unicode alias for the Kronecker product (`kron`). Type `\\otimes` and press Tab.
 
+Not exported, so that `using OperatorAlgebra` alongside `using LinearMaps` (which also
+exports `⊗`, as a lazy Kronecker `LinearMap`) does not warn. Access it as
+`OperatorAlgebra.⊗`, or opt in with `using OperatorAlgebra: ⊗`.
+
 # Examples
 ```julia
 # Tensor product of two matrices
@@ -136,5 +140,5 @@ atsite(op::AbstractOp, basis, args...; kwargs...) =
     atsite(identity, op, basis, args...; kwargs...)
 atsite(T, os::OpSum, basis, args...; kwargs...) = 
     sum(atsite(T, op, basis, args...; kwargs...) for op in os.ops)
-atsite(T, oc::OpChain, basis, args...; kwargs...) = 
-    prod(atsite(T, op, basis, args...; kwargs...) for op in reverse(oc.ops))
+atsite(T, oc::OpChain, basis, args...; kwargs...) =
+    prod(atsite(T, op, basis, args...; kwargs...) for op in oc.ops)
