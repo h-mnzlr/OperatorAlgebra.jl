@@ -1,5 +1,6 @@
 using Test
 using LinearAlgebra
+using OperatorAlgebra: atsite  # not exported
 
 # apply/apply! accept positional (Vector) and keyed (Dict) product states. With
 # integer sites 1:n both behave identically, so the shared behavior is tested

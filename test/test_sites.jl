@@ -2,6 +2,10 @@ using Test
 using OperatorAlgebra
 using LinearAlgebra
 
+# not exported: the site interface is implementor-facing, atsite is opt-in
+using OperatorAlgebra: atsite, rawsite, withrawsite, left_id, right_id,
+                       AbstractSite, FermionSite, AnyonSite, sitetype
+
 @testset "AbstractSite / FermionSite / AnyonSite" begin
     @testset "rawsite" begin
         @test rawsite(1) == 1
@@ -421,6 +425,274 @@ end
             op1 = Op([1 0; 0 1], "s1")
             op2 = Op([0 1; 1 0], "s2")
             @test sites(op1 + op2) isa Vector{String}
+        end
+    end
+end
+
+@testset "mapsites() Function Tests" begin
+    L = [1.0 0.0; 0.0 -1.0]
+    R = [0.0 1.0; 1.0 0.0]
+
+    @testset "Op site mapping" begin
+        @testset "Shifting an Int site" begin
+            @test mapsites(s -> s + 1, Op(PAULI_X, 1)).site == 2
+        end
+
+        @testset "Matrix and eltype are untouched" begin
+            op = Op(PAULI_X, 1)
+            result = mapsites(s -> s + 1, op)
+            @test result.mat == PAULI_X
+            @test eltype(result) == eltype(op)
+        end
+
+        @testset "Negative identifiers" begin
+            @test mapsites(s -> -s, Op(PAULI_X, 3)).site == -3
+        end
+    end
+
+    @testset "Site type matrix" begin
+        @testset "Int sites" begin
+            @test mapsites(s -> s + 1, Op(PAULI_X, 1)).site == 2
+        end
+
+        @testset "Float64 sites" begin
+            @test mapsites(s -> s + 0.5, Op(PAULI_X, 1.0)).site == 1.5
+        end
+
+        @testset "Symbol sites" begin
+            @test mapsites(s -> Symbol(s, :_b), Op(PAULI_X, :a)).site == :a_b
+        end
+
+        @testset "String sites" begin
+            @test mapsites(s -> s * "_b", Op(PAULI_X, "a")).site == "a_b"
+        end
+
+        @testset "Tuple sites: 2D coords flatten to 1D indices" begin
+            # site (2,3) on a width-4 lattice is index (2-1)*4 + 3 == 7
+            @test mapsites(c -> (c[1] - 1) * 4 + c[2], Op(PAULI_X, (2, 3))).site == 7
+        end
+
+        @testset "Int sites relabelled to Symbols" begin
+            @test mapsites(s -> Symbol(:site, s), Op(PAULI_X, 2)).site == :site2
+        end
+    end
+
+    @testset "OpChain and OpSum" begin
+        chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2) * Op(PAULI_Y, 3)
+
+        @testset "Shifting every site in a chain" begin
+            @test sites(mapsites(s -> s + 1, chain)) == [2, 3, 4]
+        end
+
+        @testset "Shifting every site in a sum" begin
+            os = Op(PAULI_X, 1) + Op(PAULI_Z, 2)
+            @test sites(mapsites(s -> s + 1, os)) == [2, 3]
+        end
+
+        @testset "Permuting sites through a lookup table" begin
+            perm = Dict(1 => 3, 2 => 1, 3 => 2)
+            result = mapsites(s -> perm[s], chain)
+            @test [o.site for o in result.ops] == [3, 1, 2]
+        end
+
+        @testset "Structure is preserved" begin
+            @test mapsites(s -> s + 1, chain) isa OpChain
+            @test length(mapsites(s -> s + 1, chain).ops) == 3
+        end
+
+        @testset "Scalar coefficients survive" begin
+            scaled = 2.0 * (Op(PAULI_X, 1) * Op(PAULI_Z, 2))
+            result = mapsites(s -> s + 1, scaled)
+            @test result.ops[1].mat == 2.0 * PAULI_X
+        end
+
+        @testset "OpSum of OpChains rebuilds as OpSum of OpChains" begin
+            H = OpSum(Op(PAULI_X, 1) * Op(PAULI_Z, 2), Op(PAULI_Y, 3))
+            result = mapsites(s -> s + 1, H)
+            @test result isa OpSum
+            @test result.ops[1] isa OpChain
+            @test sites(result) == [2, 3, 4]
+        end
+
+        @testset "Deeply nested chain inside sum inside chain" begin
+            inner = OpSum(Op(PAULI_X, 1) * Op(PAULI_Z, 2), Op(PAULI_Y, 3))
+            nested = OpChain(inner, Op(PAULI_X, 4))
+            result = mapsites(s -> s + 10, nested)
+            @test result isa OpChain
+            @test result.ops[1] isa OpSum
+            @test sites(result) == [11, 12, 13, 14]
+        end
+    end
+
+    @testset "Tags are preserved while identifiers change" begin
+        @testset "Fermionic chain stays fermionic" begin
+            fchain = fermion(Op(RAISE, 1) * Op(LOWER, 2))
+            result = mapsites(s -> s + 1, fchain)
+            @test sites(result) == [fermion(2), fermion(3)]
+        end
+
+        @testset "Jordan-Wigner string survives relabeling" begin
+            result = mapsites(s -> s + 1, fermion(Op(RAISE, 1)))
+            @test result.site isa FermionSite
+            @test left_id(result) == PAULI_Z
+        end
+
+        @testset "Anyonic site keeps its custom left_id/right_id" begin
+            result = mapsites(s -> s + 1, anyon(Op([1 0; 0 2], 5), L, R))
+            @test rawsite(result.site) == 6
+            @test left_id(result) == L
+            @test right_id(result) == R
+        end
+
+        @testset "Mixed bosonic + fermionic expression" begin
+            chain = Op(PAULI_X, 3) * fermion(Op(RAISE, 2)) * fermion(Op(LOWER, 1))
+            result = mapsites(s -> s + 10, chain)
+            @test Set(sites(result)) == Set([13, fermion(12), fermion(11)])
+        end
+
+        @testset "f never sees the tag wrapper" begin
+            seen = []
+            mapsites(s -> (push!(seen, s); s), fermion(Op(RAISE, 1)))
+            @test seen == [1]
+        end
+    end
+
+    @testset "withrawsite round-trip law" begin
+        @testset "Bare site" begin
+            @test withrawsite(1, rawsite(1)) == 1
+        end
+
+        @testset "FermionSite" begin
+            @test withrawsite(fermion(1), rawsite(fermion(1))) == fermion(1)
+        end
+
+        @testset "AnyonSite" begin
+            a = anyon(1, L, R)
+            @test withrawsite(a, rawsite(a)) == a
+        end
+
+        @testset "Relabeling keeps the anyon matrices" begin
+            a = anyon(1, L, R)
+            @test rawsite(withrawsite(a, 9)) == 9
+            @test withrawsite(a, 9).left_id == L
+            @test withrawsite(a, 9).right_id == R
+        end
+    end
+
+    @testset "f must return a plain identifier" begin
+        @testset "Returning a FermionSite throws" begin
+            @test_throws ArgumentError mapsites(fermion, Op(PAULI_X, 1))
+        end
+
+        @testset "Returning an AnyonSite throws" begin
+            @test_throws ArgumentError mapsites(s -> anyon(s, L, R), Op(PAULI_X, 1))
+        end
+    end
+
+    @testset "Non-injective mappings" begin
+        @testset "Collapsing two sites onto one is legal" begin
+            chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2)
+            result = mapsites(_ -> 1, chain)
+            @test sites(result) == [1]
+        end
+
+        @testset "Collapsed factors act as their product" begin
+            chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2)
+            result = mapsites(_ -> 1, chain)
+            @test atsite(Matrix, result, [1 => 2]) == PAULI_X * PAULI_Z
+        end
+
+        @testset "Collapsing mismatched dimensions throws" begin
+            chain = Op(rand(2, 2), 1) * Op(rand(3, 3), 2)
+            @test_throws DimensionMismatch basis_info(mapsites(_ -> 1, chain))
+        end
+    end
+
+    @testset "Relabeling does not change the embedding" begin
+        # For an order-preserving bijection the relabelled operator embeds into the
+        # relabelled basis exactly as the original does into the original basis.
+        chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2) * Op(PAULI_Y, 3)
+        shifted = mapsites(s -> s + 10, chain)
+        @test atsite(Matrix, shifted, basis_info(shifted)) ==
+              atsite(Matrix, chain, basis_info(chain))
+    end
+
+    @testset "Type stability" begin
+        chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2)
+
+        @testset "Int sites stay Int" begin
+            @test sitetype(mapsites(s -> s + 1, chain)) == Int
+        end
+
+        @testset "Int sites mapped to Symbols change sitetype" begin
+            @test sitetype(mapsites(s -> Symbol(:s, s), chain)) == Symbol
+        end
+
+        @testset "Int sites mapped to Strings change sitetype" begin
+            @test sitetype(mapsites(s -> string(s), chain)) == String
+        end
+
+        @testset "Op case is inferable" begin
+            @test (@inferred mapsites(s -> s + 1, Op(PAULI_X, 1))) isa Op
+        end
+
+        @testset "Non-uniform f promotes the site type to Any" begin
+            @test sitetype(mapsites(s -> s == 1 ? 1 : :b, chain)) == Any
+        end
+    end
+
+    @testset "Edge cases" begin
+        @testset "Identity mapping is a no-op" begin
+            chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2)
+            @test sites(mapsites(identity, chain)) == sites(chain)
+        end
+
+        @testset "Empty OpChain maps to an empty OpChain" begin
+            @test mapsites(s -> s + 1, OpChain()) isa OpChain
+            @test isempty(mapsites(s -> s + 1, OpChain()).ops)
+        end
+
+        @testset "Empty OpSum maps to an empty OpSum" begin
+            @test mapsites(s -> s + 1, OpSum()) isa OpSum
+            @test isempty(mapsites(s -> s + 1, OpSum()).ops)
+        end
+
+        @testset "f is never called on an empty container" begin
+            @test isempty(mapsites(_ -> error("f was called"), OpChain()).ops)
+        end
+
+        @testset "Single-factor chain" begin
+            @test sites(mapsites(s -> s + 1, OpChain(Op(PAULI_X, 1)))) == [2]
+        end
+
+        @testset "The same site repeated stays collapsed" begin
+            chain = Op(PAULI_X, 1) * Op(PAULI_Z, 1)
+            result = mapsites(s -> s + 1, chain)
+            @test [o.site for o in result.ops] == [2, 2]
+            @test sites(result) == [2]
+        end
+    end
+
+    @testset "fermion/anyon still distribute over nested structures" begin
+        @testset "fermion over an OpSum of OpChains" begin
+            H = OpSum(Op(RAISE, 1) * Op(LOWER, 2), Op(PAULI_Z, 3))
+            fH = fermion(H)
+            @test fH isa OpSum
+            @test fH.ops[1] isa OpChain
+            @test all(o.site isa FermionSite for o in fH.ops[1].ops)
+            @test fH.ops[2].site isa FermionSite
+        end
+
+        @testset "anyon over an OpSum of OpChains" begin
+            H = OpSum(Op(RAISE, 1) * Op(LOWER, 2), Op(PAULI_Z, 3))
+            aH = anyon(H, L, R)
+            @test aH isa OpSum
+            @test all(o.site isa AnyonSite for o in aH.ops[1].ops)
+        end
+
+        @testset "fermion on an empty OpChain does not error" begin
+            @test fermion(OpChain()) isa OpChain
+            @test isempty(fermion(OpChain()).ops)
         end
     end
 end

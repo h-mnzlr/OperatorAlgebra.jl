@@ -1,4 +1,5 @@
 using Test
+using OperatorAlgebra: atsite  # not exported
 
 @testset "Array/Matrix Conversion Tests" begin
     @testset "Array(op, bi) delegates to atsite(Array, ...)" begin

@@ -1,6 +1,7 @@
 using Test
 using LinearAlgebra
 using SparseArrays
+using OperatorAlgebra: atsite  # not exported
 
 @testset "Sparse Conversion for Op" begin
     bi = [1 => 2, 2 => 2]

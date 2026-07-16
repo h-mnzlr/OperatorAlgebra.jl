@@ -1,6 +1,7 @@
 using Test
 using LinearAlgebra
 using SparseArrays
+using OperatorAlgebra: atsite  # not exported
 
 @testset "atsite - Single Op" begin
     # atsite always takes a `site => dim` basis description, as returned by basis_info.

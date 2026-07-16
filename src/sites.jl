@@ -53,6 +53,68 @@ sites(o::AbstractOp) = first.(basis_info(o))
 site_dims(o::AbstractOp) = last.(basis_info(o))
 
 """
+    mapsites(f, op::AbstractOp)
+
+Return a copy of `op` with every site replaced by `f(site)`, leaving the matrices and the
+structure of the expression untouched. Every site of a nested [`OpChain`](@ref)/[`OpSum`](@ref)
+is visited.
+
+`f` receives the *raw* site identifier: if a site was tagged with [`fermion`](@ref) or
+[`anyon`](@ref), `f` sees the plain identifier underneath and the tag is re-applied to the
+result. So `f` should map identifiers to identifiers, and must not return a tagged site --
+use `fermion`/`anyon` to (re)tag, and `mapsites` to relabel.
+
+`f` need not be injective: mapping two sites onto one is well defined (the factors then act
+on the same site) and [`simplify`](@ref) will merge them. It is an error only if the
+collapsed sites carry different local dimensions, which [`basis_info`](@ref) reports as a
+`DimensionMismatch`.
+
+# Examples
+```julia
+# Shift a lattice
+mapsites(s -> s + 1, op)
+
+# Flatten 2D coordinates onto a 1D chain of width L
+mapsites(c -> (c[1] - 1) * L + c[2], op)
+
+# Permute sites through a lookup table
+mapsites(s -> perm[s], op)
+
+# Rename Int sites to Symbols
+mapsites(s -> Symbol(:site, s), op)
+
+# Tags survive relabeling
+sites(mapsites(s -> s + 1, fermion(Op(RAISE, 1))))  # [fermion(2)]
+```
+
+Note that `mapsites` can relabel a tagged site but never removes the tag: the tag is always
+re-applied around `f`'s result.
+
+See also: [`sites`](@ref), [`basis_info`](@ref), [`fermion`](@ref), [`anyon`](@ref)
+"""
+mapsites(f, op::AbstractOp) = _mapops(o -> Op(o.mat, _newsite(f, o.site)), op)
+
+_newsite(f, s) = begin
+    id = f(rawsite(s))
+    id isa AbstractSite && throw(ArgumentError(
+        "mapsites: `f` must return a plain site identifier, got $(typeof(id)). " *
+        "`f` is passed the raw identifier and any existing tag is re-applied, so " *
+        "returning a tagged site would nest one tag inside another. " *
+        "Use `fermion`/`anyon` to tag sites."))
+    withrawsite(s, id)
+end
+
+# Rebuild an operator tree, applying `f` to every `Op` leaf. Recursion bottoms out at the
+# leaves, so nested chains/sums are handled without extra methods, and `Top.name.wrapper`
+# rebuilds each level as its own type. The `AbstractOp[...]` comprehension (rather than
+# `map`) keeps the eltype concrete even when `ops` is empty -- `map` would infer
+# `Vector{Any}` there and miss the `OpChain`/`OpSum` outer constructors.
+_mapops(f, o::Op) = f(o)
+_mapops(f, x::Top) where {Top<:Union{OpChain,OpSum}} =
+    Top.name.wrapper(AbstractOp[_mapops(f, o) for o in x.ops])
+
+
+"""
     AbstractSite{Tid}
 
 Abstract base type for site wrappers that tag a raw site identifier (of type `Tid`) with
@@ -67,6 +129,9 @@ identifiers, so every operator acting on a given physical site must be tagged co
 # Interface
 Subtypes must implement:
 - `rawsite(s)`: the underlying plain site identifier
+- [`withrawsite`](@ref)`(s, id)`: `s` with its raw identifier replaced by `id` (the inverse of
+  `rawsite`, used by [`mapsites`](@ref) to relabel a site without losing its tag). Optional: the
+  generic fallback already covers any subtype that stores its identifier in a field named `site`.
 - [`left_id`](@ref)`(s, dim)` / [`right_id`](@ref)`(s, dim)`: the matrices used to resolve
   the identity on this site when commuting an operator past it from the left/right,
   respectively. Bosonic/distinguishable sites (including all bare, untagged identifiers)
@@ -85,6 +150,25 @@ itself; for an [`AbstractSite`](@ref) wrapper it is the identifier it wraps.
 """
 rawsite(s::AbstractSite) = s.site
 rawsite(s) = s
+
+"""
+    withrawsite(s, id)
+
+Return `s` with its underlying raw identifier replaced by `id`, preserving the tag (and any
+data the tag carries, such as an [`AnyonSite`](@ref)'s matrices). For a bare (untagged) site
+there is no tag to preserve, so the result is just `id`.
+
+This is the inverse of [`rawsite`](@ref), and satisfies `withrawsite(s, rawsite(s)) == s`
+for every site value. It is what lets [`mapsites`](@ref) relabel a tagged site without
+losing the tag.
+
+The generic fallback reconstructs any [`AbstractSite`](@ref) subtype that stores its raw
+identifier in a field named `site`, so custom subtypes only need their own method if they
+name that field differently (or want type stability).
+"""
+withrawsite(s, id) = id
+withrawsite(s::T, id) where {T<:AbstractSite} =
+    T.name.wrapper((n === :site ? id : getfield(s, n) for n in fieldnames(T))...)
 
 Base.isequal(a::T, b::T) where {T<:AbstractSite} = isequal(rawsite(a), rawsite(b))
 Base.isequal(a::AbstractSite, b::AbstractSite) = false
@@ -134,14 +218,15 @@ end
 
 Base.show(io::IO, s::FermionSite) = print(io, "fermion(", rawsite(s), ")")
 
-left_id(::FermionSite, dim::Int=2) = diag([1 * (-1)^(i-1) for i in 1:dim])
+left_id(::FermionSite, dim::Int=2) = diagm([1 * (-1)^(i-1) for i in 1:dim])
 right_id(::FermionSite, dim::Int=2) = I(dim)
+
+# type-stable specialisation of the generic reflection-based fallback
+withrawsite(::FermionSite, id) = FermionSite(id)
 
 """
     fermion(site)
-    fermion(op::Op)
-    fermion(oc::OpChain)
-    fermion(os::OpSum)
+    fermion(op::AbstractOp)
 
 Tag `site` (or every site an operator/chain/sum acts on) as fermionic (see
 [`FermionSite`](@ref)). Applying `fermion` to an [`OpChain`](@ref)/[`OpSum`](@ref) tags all
@@ -155,13 +240,11 @@ c = fermion(Op(LOWER, 2))
 n = normal_order(c_dag * c)  # picks up the Jordan-Wigner sign automatically
 ```
 
-See also: [`AbstractSite`](@ref), [`anyon`](@ref)
+See also: [`AbstractSite`](@ref), [`anyon`](@ref), [`mapsites`](@ref)
 """
 fermion(site) = FermionSite(site)
 fermion(site::AbstractSite) = fermion(rawsite(site))
-fermion(o::Op) = Op(o.mat, fermion(o.site))
-fermion(oc::OpChain) = OpChain(map(fermion, oc.ops))
-fermion(os::OpSum) = OpSum(map(fermion, os.ops))
+fermion(o::AbstractOp) = _mapops(x -> Op(x.mat, fermion(x.site)), o)
 
 """
     AnyonSite{Tid,Tmat} <: AbstractSite{Tid}
@@ -178,24 +261,24 @@ struct AnyonSite{Tid,Tmat} <: AbstractSite{Tid}
 end
 
 Base.show(io::IO, s::AnyonSite) = print(io, "anyon(", rawsite(s), ", ", s.left_id, ", ", s.right_id, ")")
+Base.hash(s::AnyonSite, h::UInt) = hash((rawsite(s), s.left_id, s.right_id), hash(typeof(s), h))
 
 left_id(s::AnyonSite, dim::Int=size(s.left_id, 1)) = s.left_id
 right_id(s::AnyonSite, dim::Int=size(s.right_id, 1)) = s.right_id
 
+# type-stable specialisation of the generic reflection-based fallback
+withrawsite(s::AnyonSite, id) = AnyonSite(id, s.left_id, s.right_id)
+
 """
     anyon(site, left_id::AbstractMatrix, right_id::AbstractMatrix)
-    anyon(o::Op, left_id, right_id)
-    anyon(oc::OpChain, left_id, right_id)
-    anyon(os::OpSum, left_id, right_id)
+    anyon(op::AbstractOp, left_id, right_id)
 
 Tag `site` (or every site an operator/chain/sum acts on) with custom left/right
 identity-resolution matrices (see [`AnyonSite`](@ref)). As with [`fermion`](@ref), a
 physical site must be tagged consistently across every operator that touches it.
 
-See also: [`AbstractSite`](@ref), [`fermion`](@ref)
+See also: [`AbstractSite`](@ref), [`fermion`](@ref), [`mapsites`](@ref)
 """
 anyon(site, left_id, right_id) = AnyonSite(site, left_id, right_id)
 anyon(site::AbstractSite, left_id, right_id) = anyon(rawsite(site), left_id, right_id)
-anyon(o::Op, left_id, right_id) = Op(o.mat, anyon(o.site, left_id, right_id))
-anyon(oc::OpChain, left_id, right_id) = OpChain(map(s -> anyon(s, left_id, right_id), oc.ops))
-anyon(os::OpSum, left_id, right_id) = OpSum(map(s -> anyon(s, left_id, right_id), os.ops))
+anyon(o::AbstractOp, left_id, right_id) = _mapops(x -> Op(x.mat, anyon(x.site, left_id, right_id)), o)

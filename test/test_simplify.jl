@@ -1,5 +1,6 @@
 using Test
 using SparseArrays
+using OperatorAlgebra: atsite  # not exported
 
 @testset "simplify() Tests" begin
     @testset "Op simplified is Op" begin
