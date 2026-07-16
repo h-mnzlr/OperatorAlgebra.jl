@@ -8,15 +8,18 @@ The `atsite` function casts a single-site operator into its matrix representatio
 
 ### Basic atsite
 
+`atsite` takes a `site => dim` basis description (a "basis info"), as returned by
+[`basis_info`](@ref) since it needs to know each site's local dimension to build the identities it inserts elsewhere.
+
 ```julia
-# Define a 3-site system
-basis = [1, 2, 3]
+# Define a 3-site system: three 2-dimensional sites
+bi = [1 => 2, 2 => 2, 3 => 2]
 
 # Pauli X on site 2
 σx = Op(PAULI_X, 2)
 
 # Extend to full space: I ⊗ σx ⊗ I
-σx_full = atsite(σx, basis)
+σx_full = atsite(σx, bi)
 # Result is an 8×8 matrix
 ```
 
@@ -26,28 +29,41 @@ You can apply a transformation function (like `sparse`). This allows you to, e.g
 
 ```julia
 # Convert to sparse in the process: I ⊗ sparse(σx) ⊗ I
-σx_sparse = atsite(sparse, σx, basis)
+σx_sparse = atsite(sparse, σx, bi)
 
 # Custom transformation: I ⊗ f(σx) ⊗ I
 f(x) = 2.0 * x
-σx_scaled = atsite(f, σx, basis)
+σx_scaled = atsite(f, σx, bi)
 ```
 
 ### Variable Dimensions
 
-Sometimes, it is necessary to work with local Hilbert spaces of different dimensions at different sites. In such cases, the local dimensions have to be specified as an additional argument to `atsite`. Passing an arbitrary transformation is still allowed to hook into the expansion process.
+Since `bi` already carries each site's dimension, sites with different local dimensions
+just need their own `dim` in the pairs — there is no separate `dims` argument.
 
 ```julia
 # Site 1: dimension 2, Site 2: dimension 3, Site 3: dimension 2
-dims = [2, 3, 2]
-basis = [1, 2, 3]
+bi = [1 => 2, 2 => 3, 3 => 2]
 
 # Create a 3×3 operator for site 2
 op_3x3 = Op(rand(3, 3), 2)
 
 # Extend with correct dimensions
-op_full = atsite(op_3x3, basis, dims)
+op_full = atsite(op_3x3, bi)
 # Result is 12×12 (2 × 3 × 2)
+```
+
+### Deriving bi automatically
+
+For a Hamiltonian built from many operators, [`basis_info`](@ref) collects each site's
+dimension (and checks they're consistent) directly from the operator itself:
+
+```julia
+H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:7)
+H_full = atsite(H, basis_info(H))
+
+# sparse(op) and Array(op)/Matrix(op) (with no explicit basis) do exactly this
+H_sparse = sparse(H)  # equivalent to sparse(H, basis_info(H))
 ```
 
 For completeness, the `atsite` functionality can also be used to extend operators that act on multiple sites, e.g., an `OpChain` or `OpSum` operator. In this case, the operator is simply extended as a whole to the full Hilbert space. Ususally, this feature is not recommended, as there are usually more optimized ways to construct such operators directly in the full space for a given matrix type, e.g., for sparse matrices.
@@ -59,26 +75,30 @@ The main goal of this package is to create and manipulate operators algebraicall
 ### Dense Matrices
 
 ```julia
-basis = 1:8
+bi = (1:8) .=> 2  # 8 sites, each dimension 2
 
 # Single operator
 σx = Op(PAULI_X, 4)
-σx_matrix = Array(σx, basis)
+σx_matrix = Array(σx, bi)
 
 # Hamiltonian
 H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:7)
-H_matrix = Array(H, basis)
+H_matrix = Array(H, bi)
+
+# Or let basis_info derive it from H itself
+H_matrix = Array(H)
 ```
 
 ### Sparse Matrices
 
 ```julia
 using SparseArrays
-basis = 1:12
+bi = (1:12) .=> 2
 
 # Hamiltonian
 H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:11)
-H_matrix = sparse(H, basis)
+H_matrix = sparse(H, bi)
+H_matrix = sparse(H)  # equivalent, via basis_info(H)
 ```
 
 ### LinearMaps

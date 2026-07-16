@@ -7,9 +7,8 @@ CurrentModule = OperatorAlgebra
 ## Tensor Products
 
 ```@docs
-⊗
-kronpow
 atsite
+basis_info
 ```
 
 ## Applying Operators
@@ -28,7 +27,8 @@ The `sparse` function from SparseArrays is extended to work with operators:
 - `sparse(op::Op)`: Convert operator's matrix to sparse format
 - `sparse(op::OpSum)`: Convert all matrices in the sum to sparse format  
 - `sparse(op::OpChain)`: Convert all matrices in the chain to sparse format
-- `sparse(op::AbstractOp, basis)`: Convert to full Hilbert space sparse matrix
+- `sparse(op::AbstractOp, bi)`: Convert to full Hilbert space sparse matrix, where `bi` is a `site => dim` basis description as returned by `basis_info`
+- `sparse(op::AbstractOp)`: Same, deriving `bi` automatically via `basis_info(op)`
 
 See the [Matrix Representations](../guide/matrix_representation.md) guide for examples.
 

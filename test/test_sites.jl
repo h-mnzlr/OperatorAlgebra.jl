@@ -1,5 +1,117 @@
 using Test
 using OperatorAlgebra
+using LinearAlgebra
+
+@testset "AbstractSite / FermionSite / AnyonSite" begin
+    @testset "rawsite" begin
+        @test rawsite(1) == 1
+        @test rawsite(fermion(1)) == 1
+        @test rawsite(anyon(:a, PAULI_Z, PAULI_Z)) == :a
+    end
+
+    @testset "equality, hash, ordering" begin
+        @test fermion(1) == fermion(1)
+        @test isequal(fermion(1), fermion(1))
+        @test fermion(1) != fermion(2)
+        @test fermion(1) != 1          # tagged site is distinct from the bare identifier
+        @test 1 != fermion(1)
+        @test hash(fermion(1)) == hash(fermion(1))
+        @test isless(fermion(1), fermion(2))
+        @test sort([fermion(2), fermion(1)]) == [fermion(1), fermion(2)]
+
+        # different tags on the same raw site are never equal to each other
+        @test fermion(1) != anyon(1, PAULI_Z, PAULI_Z)
+
+        d = Dict(fermion(1) => "a")
+        d[fermion(1)] = "b"
+        @test length(d) == 1
+        @test d[fermion(1)] == "b"
+    end
+
+    @testset "left_id/right_id defaults for bare (untagged) sites" begin
+        op = Op([1 2; 3 4], 1)
+        @test left_id(op) == I(2)
+        @test right_id(op) == I(2)
+
+        op3 = Op(rand(3, 3), :a)
+        @test left_id(op3) == I(3)
+        @test right_id(op3) == I(3)
+    end
+
+    @testset "fermion() tags sites and carries the Jordan-Wigner matrix" begin
+        c = fermion(Op(RAISE, 1))
+        @test c.site isa FermionSite
+        @test rawsite(c.site) == 1
+        @test left_id(c) == PAULI_Z
+
+        # fermion() distributes over OpChain/OpSum, tagging every factor/term
+        chain = fermion(Op(RAISE, 1) * Op(LOWER, 2))
+        @test all(o.site isa FermionSite for o in chain.ops)
+
+        os = fermion(Op(RAISE, 1) + Op(LOWER, 2))
+        @test all(o.site isa FermionSite for o in os.ops)
+    end
+
+    @testset "anyon() tags sites with custom left/right matrices" begin
+        L = [1.0 0.0; 0.0 -1.0]
+        R = [0.0 1.0; 1.0 0.0]
+        a = anyon(Op([1 0; 0 2], 5), L, R)
+        @test a.site isa AnyonSite
+        @test left_id(a) == L
+        @test right_id(a) == R
+
+        chain = anyon(Op(RAISE, 1) * Op(LOWER, 2), L, R)
+        @test all(o.site isa AnyonSite for o in chain.ops)
+    end
+
+    @testset "atsite automatically picks up left_id/right_id" begin
+        bi = [fermion(1) => 2, fermion(2) => 2, fermion(3) => 2]
+
+        # A fermionic operator on the first site of the basis has no sites to its left,
+        # so only right_id (identity, under this package's single-sided JW convention)
+        # is exercised; embedding it should be unaffected by the tagging.
+        c1 = fermion(Op(RAISE, 1))
+        @test atsite(Matrix, c1, bi) == kron(RAISE, I(2), I(2))
+
+        # A fermionic operator further along the basis picks up the left_id (PAULI_Z)
+        # string for every site before it.
+        c3 = fermion(Op(RAISE, 3))
+        @test atsite(Matrix, c3, bi) == kron(PAULI_Z, PAULI_Z, RAISE)
+    end
+
+    @testset "atsite with custom anyon left/right matrices" begin
+        L = [1.0 0.0; 0.0 -1.0]
+        R = [0.0 1.0; 1.0 0.0]
+        bi = [anyon(1, L, R) => 2, anyon(2, L, R) => 2, anyon(3, L, R) => 2]
+        op = anyon(Op([0 1; 1 0], 2), L, R)
+        @test atsite(Matrix, op, bi) == kron(L, [0 1; 1 0], R)
+    end
+
+    @testset "sites()/basis_info() see the tagged site, not the raw identifier" begin
+        c = fermion(Op(RAISE, 1))
+        @test sites(c) == [fermion(1)]
+        @test sites(c) != [1]
+        @test basis_info(c) == [fermion(1) => 2]
+    end
+
+    @testset "mixed bosonic + fermionic sites in one expression" begin
+        b = Op(PAULI_X, 3)          # untagged (bosonic/distinguishable) site
+        c1 = fermion(Op(LOWER, 1))
+        c2dag = fermion(Op(RAISE, 2))
+
+        chain = b * c2dag * c1
+        bi = basis_info(chain)
+        @test Set(first.(bi)) == Set([3, fermion(2), fermion(1)])
+
+        M = atsite(Matrix, chain, bi)
+        @test M == atsite(Matrix, b, bi) * atsite(Matrix, c2dag, bi) * atsite(Matrix, c1, bi)
+
+        H = b + c2dag * c1
+        biH = basis_info(H)
+        MH = atsite(Matrix, H, biH)
+        @test MH == atsite(Matrix, b, biH) + atsite(Matrix, c2dag * c1, biH)
+    end
+end
 
 @testset "sites() Function Tests" begin
     

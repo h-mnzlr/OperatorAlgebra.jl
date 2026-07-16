@@ -1,84 +1,22 @@
 """
-    ⊗(a, b)
-    ⊗(as...)
-
-Unicode alias for the Kronecker product (`kron`). Type `\\otimes` and press Tab.
-
-Not exported, so that `using OperatorAlgebra` alongside `using LinearMaps` (which also
-exports `⊗`, as a lazy Kronecker `LinearMap`) does not warn. Access it as
-`OperatorAlgebra.⊗`, or opt in with `using OperatorAlgebra: ⊗`.
-
-# Examples
-```julia
-# Tensor product of two matrices
-A = [1 0; 0 1]
-B = [0 1; 1 0]
-C = A ⊗ B  # Equivalent to kron(A, B)
-
-# Multiple tensor products
-D = A ⊗ B ⊗ C
-```
-
-See also: `kron`, [`kronpow`](@ref)
-"""
-⊗(a, b) = kron(a, b)
-⊗(as...) = kron(as...)
-
-"""
-    kronpow(A, n::Integer)
-
-Compute the n-th Kronecker power of matrix `A`: A ⊗ A ⊗ ... ⊗ A (n times).
-
-Uses a divide-and-conquer algorithm for efficient computation with large n.
-
-# Arguments
-- `A`: Matrix to take Kronecker power of
-- `n`: Non-negative integer power
-
-# Returns
-The n-th Kronecker power of A
-
-# Examples
-```julia
-# Identity on 2ⁿ-dimensional space
-I2_n = kronpow([1 0; 0 1], n)
-
-# Spin chain with all spins in |↑⟩ state
-up = [1, 0]
-chain_state = kronpow(up, n_sites)
-```
-
-# Throws
-- `ArgumentError`: If n is negative
-"""
-function kronpow(A, n::Integer)
-    n < 0 && throw(ArgumentError("Negative powers not supported"))
-    n == 0 && return fill(one(eltype(A)), 1, 1)
-    n == 1 && return A
-    
-    # Use divide-and-conquer for better performance with large N
-    half = kronpow(A, n ÷ 2)
-    result = half ⊗ half
-    isodd(n) && (result = result ⊗ A)
-    return result
-end
-
-"""
-    atsite(T, op::AbstractOp, basis; id=I(local_dim), string=id)
-    atsite(T, op::AbstractOp, basis, dims; ids=map(I, dims), strings=ids)
+    atsite(T, op::AbstractOp, bi::AbstractVector{<:Pair})
+    atsite(op::AbstractOp, bi::AbstractVector{<:Pair})
 
 Extend a single-site operator to the full Hilbert space of a tensor product system.
 
-Constructs the full operator by inserting identity operators at all other sites:
-I ⊗ ... ⊗ I ⊗ op.mat ⊗ I ⊗ ... ⊗ I
+`bi` is a `site => dim` basis description, as returned by [`basis_info`](@ref) (`sites(op)`
+gives only the site identifiers, not their dimensions, so it is not enough on its own).
+
+Constructs the full operator by inserting identity-resolution operators at all other sites:
+string ⊗ ... ⊗ string ⊗ op.mat ⊗ id ⊗ ... ⊗ id
+where, for each other site, `string`/`id` is [`left_id`](@ref)/[`right_id`](@ref) of that
+site depending on whether it comes before/after `op.site` in `bi`. These are the ordinary
+identity matrix unless the site was tagged with [`fermion`](@ref)/[`anyon`](@ref).
 
 # Arguments
 - `T`: Optional transformation function applied to `op.mat` (e.g., `sparse`)
 - `op::Op`: Single-site operator to extend
-- `basis`: Vector of site identifiers defining the system
-- `dims`: (Optional) Vector of local dimensions for each site
-
-Note: `I` is the identity matrix constructor `LinearAlgebra.I`
+- `bi`: `site => dim` pairs defining the system, e.g. `basis_info(op)`
 
 # Returns
 The full Hilbert space matrix representation
@@ -87,58 +25,45 @@ The full Hilbert space matrix representation
 ```julia
 # Pauli X on site 2 of a 3-site system
 σx = Op(PAULI_X, 2)
-basis = [1, 2, 3]
-σx_full = atsite(σx, basis)  # Returns I ⊗ PAULI_X ⊗ I
+bi = [1 => 2, 2 => 2, 3 => 2]
+σx_full = atsite(σx, bi)  # Returns I ⊗ PAULI_X ⊗ I
 
 # Convert to sparse matrix in the process
-σx_sparse = atsite(sparse, σx, basis)
+σx_sparse = atsite(sparse, σx, bi)
 
 # For sites with different dimensions
-dims = [2, 3, 2]  # Site 2 has dimension 3
+bi = [1 => 2, 2 => 3, 3 => 2]  # Site 2 has dimension 3
 op = Op(rand(3, 3), 2)  # custom 3x3 matrix
-op_full = atsite(op, basis, dims)
+op_full = atsite(op, bi)
+
+# Derive bi automatically from the operator itself
+op_full = atsite(op, basis_info(op))
 ```
 
 # Extended Methods
-- `atsite(os::OpSum, basis)`: Extends each term and sums
-- `atsite(oc::OpChain, basis)`: Extends each operator and takes product
+- `atsite(os::OpSum, bi)`: Extends each term and sums
+- `atsite(oc::OpChain, bi)`: Extends each operator and takes product
 
-See also: [`Op`](@ref), [`kronpow`](@ref), `sparse`
+See also: [`Op`](@ref), [`basis_info`](@ref), `sparse`
 """
-function atsite(T, op::Op, basis; id=nothing, string=id)
-    idx_kron = findfirst(x -> x == op.site, basis)
+function atsite(T, op::Op, bi::AbstractVector{<:Pair})
+    sites = first.(bi)
+    dims = last.(bi)
+
+    idx_kron = findfirst(==(op.site), sites)
     idx_kron === nothing && throw(ArgumentError("Site $(op.site) not found in basis"))
 
-    L = length(basis)
-    Dsite = size(op.mat, 1)
+    left_ids = left_id.(sites[1:idx_kron-1], dims[1:idx_kron-1])
+    right_ids = right_id.(sites[idx_kron+1:end], dims[idx_kron+1:end])
 
-    isnothing(id) && (id = LinearAlgebra.I(Dsite))
-    isnothing(string) && (string = id)
-    
-    kronpow(string, idx_kron - 1) ⊗ T(op.mat) ⊗ kronpow(id, L - idx_kron)
+    # kron requires at least two arguments, so a single-site basis (nothing on either
+    # side to tensor with) must short-circuit to the bare (transformed) matrix.
+    isempty(left_ids) && isempty(right_ids) && return T(op.mat)
+    kron(left_ids..., T(op.mat), right_ids...)
 end
-function atsite(T, op::Op, basis, dims; ids=map(I, dims), strings=ids)
-    idx_kron = findfirst(x -> x == op.site, basis)
-    idx_kron === nothing && throw(ArgumentError("Site $(op.site) not found in basis"))
 
-    Is_left = strings[1:idx_kron - 1]
-    Is_right = ids[(idx_kron + 1):end]
-
-    idx_kron == 1 && return T(op.mat) ⊗ kron(Is_right...)
-    idx_kron == length(basis) && return kron(Is_left...) ⊗ T
-
-    o = T(op.mat)
-    for Il in reverse(Is_left)
-        o = Il ⊗ o
-    end
-    for Ir in Is_right
-        o = o ⊗ Ir
-    end
-    o
-end
-atsite(op::AbstractOp, basis, args...; kwargs...) = 
-    atsite(identity, op, basis, args...; kwargs...)
-atsite(T, os::OpSum, basis, args...; kwargs...) = 
-    sum(atsite(T, op, basis, args...; kwargs...) for op in os.ops)
-atsite(T, oc::OpChain, basis, args...; kwargs...) =
-    prod(atsite(T, op, basis, args...; kwargs...) for op in oc.ops)
+atsite(op::AbstractOp, bi::AbstractVector{<:Pair}) = atsite(identity, op, bi)
+atsite(T, os::OpSum, bi::AbstractVector{<:Pair}) =
+    sum(atsite(T, op, bi) for op in os.ops)
+atsite(T, oc::OpChain, bi::AbstractVector{<:Pair}) =
+    prod(atsite(T, op, bi) for op in oc.ops)

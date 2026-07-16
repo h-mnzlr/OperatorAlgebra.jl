@@ -7,7 +7,7 @@ OperatorAlgebra provides efficient representations and operations for quantum op
 acting on tensor product spaces, with support for:
 
 - **Flexible operator types**: [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref)
-- **Tensor products**: Kronecker operations with [`⊗`](@ref), [`kronpow`](@ref), [`atsite`](@ref)
+- **Tensor products**: Extend single-site operators to the full Hilbert space with [`atsite`](@ref)
 - **Multiple backends**: Sparse matrices, dense matrices, and matrix-free LinearMaps
 - **Product state operations**: Efficient [`apply`](@ref) for tensor product states
 
@@ -19,11 +19,13 @@ acting on tensor product spaces, with support for:
 
 # Key Functions
 - [`apply`](@ref), [`apply!`](@ref): Apply operators to product states
-- [`atsite`](@ref): Extend operator to full Hilbert space
+- [`atsite`](@ref): Extend operator to full Hilbert space, given a `site => dim` basis
+  description as returned by [`basis_info`](@ref)
 - `sparse`: Convert to sparse matrix representation
 - `LinearMap`: Create matrix-free representation
-- [`kronpow`](@ref): Kronecker powers; [`⊗`](@ref) (an alias for `kron`) is available as
-  `OperatorAlgebra.⊗` — it is not exported to avoid clashing with `LinearMaps.⊗`
+- [`fermion`](@ref), [`anyon`](@ref): Tag a site (or a whole operator/chain/sum) with
+  non-trivial commutation relations; see [`AbstractSite`](@ref) for the general API and
+  [`normal_order`](@ref)/[`atsite`](@ref) for where it is used
 
 # Predefined Operators
 Common quantum operators are exported as constants:
@@ -43,8 +45,7 @@ using OperatorAlgebra
 H = σx + σz + 0.5 * σx * σz
 
 # Convert to matrix
-basis = [1, 2]
-H_matrix = sparse(H, basis)
+H_matrix = sparse(H)  # equivalent to sparse(H, basis_info(H))
 
 # Apply to product state
 state = [[1.0, 0.0], [1.0, 0.0]]
@@ -59,11 +60,12 @@ using LinearAlgebra, SparseArrays
 using LinearMaps
 
 export AbstractOp, Op, OpChain, OpSum
-export kronpow, atsite
-export sites, simplify, normal_order, commutator
+export basis_info, sites, simplify, normal_order, commutator
 
 export PAULI_X, PAULI_Y, PAULI_Z, SPIN_X, SPIN_Y, SPIN_Z, I2, RAISE, LOWER, OCC_PART, OCC_HOLE
 export apply, apply!
+
+export fermion, anyon
 
 include("abstract.jl")
 include("op.jl")
@@ -71,6 +73,7 @@ include("opchain.jl")
 include("opsum.jl")
 
 include("op_constants.jl")
+include("sites.jl")
 include("kron.jl")
 include("linalg.jl")
 include("array.jl")

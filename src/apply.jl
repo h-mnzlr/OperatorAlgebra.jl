@@ -69,8 +69,8 @@ _apply!(op::Op, state) = begin
     state[op.site] = op.mat * state[op.site]
     state
 end
-_apply!(op::Op{Tid}, state, bases::AbstractVector{Tid}) where {Tid} = begin
-    idx = findfirst(==(op.site), bases)
+_apply!(op::Op{Tid}, state, basis::AbstractVector{Tid}) where {Tid} = begin
+    idx = findfirst(==(op.site), basis)
     state[idx] = op.mat * state[idx]
     state
 end

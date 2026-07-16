@@ -24,42 +24,48 @@ end
 
 @testset "simplify() Integration: matrix equivalence" begin
 # %%
+    # atsite/sparse now take a `site => dim` basis description; build one from the given
+    # `basis` (preserving its order) with dims either given explicitly or looked up from
+    # `op` itself (via basis_info), matching what the old separate basis/dims arguments meant.
+    function _bi(op, basis, dims)
+        if !isnothing(dims)
+            return collect(basis .=> dims)
+        end
+        dim_map = Dict(basis_info(op))
+        default_dim = isempty(dim_map) ? 2 : first(values(dim_map))
+        [s => get(dim_map, s, default_dim) for s in basis]
+    end
+
     function assert_matrix_equivalent(op, basis; dims=nothing)
         sop = simplify(op, verbosity=0)
+        bi = _bi(op, basis, dims)
+
+        M = atsite(Matrix, op, bi)
+        Ms = atsite(Matrix, sop, bi)
+        @test M == Ms
 
         if isnothing(dims)
-            M = atsite(Matrix, op, basis)
-            Ms = atsite(Matrix, sop, basis)
-            @test M == Ms
-
-            S = sparse(op, basis)
-            Ss = sparse(sop, basis)
+            S = sparse(op, bi)
+            Ss = sparse(sop, bi)
             @test S == Ss
-        else
-            M = atsite(Matrix, op, basis, dims)
-            Ms = atsite(Matrix, sop, basis, dims)
-            @test M == Ms
         end
     end
-    
+
     function assert_matrix_equivalent_rules(op, basis, f; dims=nothing)
         sops = f(op)
+        bi = _bi(op, basis, dims)
 
         for sop in sops
             @test !isequal(op, sop)  # Ensure that the rule actually transforms the operator
 
-            if isnothing(dims)
-                M = atsite(Matrix, op, basis)
-                Ms = atsite(Matrix, sop, basis)
-                @test M == Ms
+            M = atsite(Matrix, op, bi)
+            Ms = atsite(Matrix, sop, bi)
+            @test M == Ms
 
-                S = sparse(op, basis)
-                Ss = sparse(sop, basis)
+            if isnothing(dims)
+                S = sparse(op, bi)
+                Ss = sparse(sop, bi)
                 @test S == Ss
-            else
-                M = atsite(Matrix, op, basis, dims)
-                Ms = atsite(Matrix, sop, basis, dims)
-                @test M == Ms
             end
         end
     end

@@ -1,34 +1,34 @@
 using Test
 
 @testset "Array/Matrix Conversion Tests" begin
-    @testset "Array(op, basis) delegates to atsite(Array, ...)" begin
+    @testset "Array(op, bi) delegates to atsite(Array, ...)" begin
         op = Op(PAULI_X, 2)
-        basis = [1, 2, 3]
+        bi = [1 => 2, 2 => 2, 3 => 2]
 
-        result = Array(op, basis)
-        expected = atsite(Array, op, basis)
+        result = Array(op, bi)
+        expected = atsite(Array, op, bi)
 
         @test result == expected
         @test result isa Matrix{Int64}
     end
 
-    @testset "Array(op) uses sites(op) as default basis" begin
+    @testset "Array(op) uses basis_info(op) as default basis" begin
         op = Op([1 2; 3 4], :a)
 
         result = Array(op)
-        expected = atsite(Array, op, sites(op))
+        expected = atsite(Array, op, basis_info(op))
 
         @test result == expected
         @test size(result) == (2, 2)
     end
 
-    @testset "Matrix{T}(op, basis) enforces output element type" begin
+    @testset "Matrix{T}(op, bi) enforces output element type" begin
         op = Op([1 0; 0 1], 1)
-        basis = [1, 2]
+        bi = [1 => 2, 2 => 2]
 
-        result = Matrix{Float64}(op, basis)
+        result = Matrix{Float64}(op, bi)
 
-        @test result == atsite(Matrix{Float64}, op, basis)
+        @test result == atsite(Matrix{Float64}, op, bi)
         @test eltype(result) == Float64
     end
 
@@ -37,7 +37,7 @@ using Test
 
         result = Matrix{ComplexF64}(op)
 
-        @test result == atsite(Matrix{ComplexF64}, op, sites(op))
+        @test result == atsite(Matrix{ComplexF64}, op, basis_info(op))
         @test eltype(result) == ComplexF64
     end
 
@@ -46,16 +46,16 @@ using Test
         op2 = Op(PAULI_Z, 2)
         opsum = OpSum(op1, op2)
         opchain = OpChain(op1, op2)
-        basis = [1, 2]
+        bi = [1 => 2, 2 => 2]
 
-        @test Array(opsum, basis) == atsite(Array, opsum, basis)
-        @test Array(opchain, basis) == atsite(Array, opchain, basis)
+        @test Array(opsum, bi) == atsite(Array, opsum, bi)
+        @test Array(opchain, bi) == atsite(Array, opchain, bi)
 
-        msum = Matrix{Float64}(opsum, basis)
-        mchain = Matrix{ComplexF64}(opchain, basis)
+        msum = Matrix{Float64}(opsum, bi)
+        mchain = Matrix{ComplexF64}(opchain, bi)
 
-        @test msum == atsite(Matrix{Float64}, opsum, basis)
-        @test mchain == atsite(Matrix{ComplexF64}, opchain, basis)
+        @test msum == atsite(Matrix{Float64}, opsum, bi)
+        @test mchain == atsite(Matrix{ComplexF64}, opchain, bi)
         @test eltype(msum) == Float64
         @test eltype(mchain) == ComplexF64
     end

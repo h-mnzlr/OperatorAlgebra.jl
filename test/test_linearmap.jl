@@ -9,7 +9,7 @@ using SparseArrays
         for op in (Op(PAULI_X, 1), Op(PAULI_Y, 2), Op(PAULI_Z, 2), Op([1 2; 3 4], 1), Op([2 0; 0 3], 1))
             lm = LinearMap(op, basis)
             v = rand(ComplexF64, 4)
-            @test lm * v ≈ sparse(op, basis) * v
+            @test lm * v ≈ sparse(op, basis .=> 2) * v
         end
     end
 
@@ -94,7 +94,7 @@ end
         for opsum in cases
             lm = LinearMap(opsum, basis)
             v = rand(4)
-            @test lm * v ≈ sparse(opsum, basis) * v
+            @test lm * v ≈ sparse(opsum, basis .=> 2) * v
         end
     end
 
@@ -142,7 +142,7 @@ end
         for chain in cases
             lm = LinearMap(chain, basis)
             v = rand(ComplexF64, 4)
-            @test lm * v ≈ sparse(chain, basis) * v
+            @test lm * v ≈ sparse(chain, basis .=> 2) * v
         end
     end
 
@@ -173,7 +173,7 @@ end
         v = rand(4)
 
         @test lm isa LinearMap
-        @test lm * v ≈ sparse(chain, basis) * v
+        @test lm * v ≈ sparse(chain, basis .=> 2) * v
     end
 
     @testset "Symbol basis and laziness" begin
@@ -201,7 +201,7 @@ end
         v = rand(ComplexF64, 8)
 
         @test size(lm) == (8, 8)
-        @test lm * v ≈ sparse(opsum, basis) * v
+        @test lm * v ≈ sparse(opsum, basis .=> 2) * v
     end
 
     @testset "Custom dims consistency" begin

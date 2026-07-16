@@ -39,17 +39,6 @@ Base.:-(A::AbstractOp, B::AbstractOp) = A + -B
 
 Base.convert(::Type{AbstractOp{Tid,Tmat}}, op::Top) where {Tid,Tmat,Top} = convert(Top.name.wrapper{Tid,Tmat}, op)
 
-""" 
-    sites(op::AbstractOp)
-
-Return a vector of site identifiers where the operator acts.
-"""
-sites(o::AbstractOp) = first.(basis_info(o))
-site_dims(o::AbstractOp) = last.(basis_info(o))
-
-_sort_if_sortable!(vs::Vector{T}) where {T} = _is_sortable(T) ? sort!(vs) : vs 
-_is_sortable(T) = hasmethod(isless, Tuple{T,T})
-
 # Default iszero implementation
 Base.iszero(op::AbstractOp) = false
 Base.isone(op::AbstractOp) = false

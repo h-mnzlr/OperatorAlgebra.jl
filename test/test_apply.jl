@@ -225,20 +225,21 @@ end
 end
 
 @testset "Apply consistency with sparse matrices" begin
-    basis = [1, 2]
+    basis = [1, 2]  # apply's own basis: a plain list of site identifiers, unrelated to atsite
+    bi = [1 => 2, 2 => 2]  # sparse/atsite need a site => dim basis description
     ψ = [[1.0, 0.0], [1.0, 0.0]]
 
     # single operator
     σx = Op(PAULI_X, 1)
-    @test kron(apply(σx, ψ, basis)...) ≈ sparse(σx, basis) * kron(ψ[1], ψ[2])
+    @test kron(apply(σx, ψ, basis)...) ≈ sparse(σx, bi) * kron(ψ[1], ψ[2])
 
     # OpChain on distinct sites
     chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2)
-    @test kron(apply(chain, ψ, basis)...) ≈ sparse(chain, basis) * kron(ψ[1], ψ[2])
+    @test kron(apply(chain, ψ, basis)...) ≈ sparse(chain, bi) * kron(ψ[1], ψ[2])
 
     # OpChain with non-commuting factors on the same site: apply and the matrix
     # conversions must agree on the application order (rightmost factor first)
     noncomm = Op(PAULI_X, 1) * Op(PAULI_Z, 1)
-    @test kron(apply(noncomm, ψ, basis)...) ≈ sparse(noncomm, basis) * kron(ψ[1], ψ[2])
+    @test kron(apply(noncomm, ψ, basis)...) ≈ sparse(noncomm, bi) * kron(ψ[1], ψ[2])
     @test kron(apply(noncomm, ψ, basis)...) ≈ kron(PAULI_X * PAULI_Z * ψ[1], ψ[2])
 end

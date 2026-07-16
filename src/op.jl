@@ -36,8 +36,10 @@ See also: [`OpChain`](@ref), [`OpSum`](@ref), [`apply`](@ref), [`atsite`](@ref)
 struct Op{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     mat::AbstractMatrix{Tmat}
     site::Tid
-    
-    # Single constructor that handles everything
+
+    function Op{Tid,Tmat}(mat::AbstractMatrix, site) where {Tid,Tmat}
+        new{Tid,Tmat}(mat, site)
+    end
     function Op(mat::AbstractMatrix{Tmat}, site::Tid) where {Tid,Tmat}
         new{Tid,Tmat}(mat, site)
     end
@@ -54,12 +56,10 @@ Base.isone(A::Op) = isone(A.mat)
 
 Base.isequal(A::Op) = B -> B isa Op && isequal(A.site, B.site) && isequal(A.mat, B.mat)
 
-Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} = 
-    Op(convert(AbstractMatrix{Tmat}, A.mat), convert(Tid, A.site))
+Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} =
+    Op{Tid,Tmat}(convert(AbstractMatrix{Tmat}, A.mat), A.site)
 
 Base.show(io::IO, op::Op) = print(io, "Op(site=$(op.site), mat=$(op.mat))")
-
-sites(op::Op) = [op.site]
 
 commutator(o1::Op, o2::Op) = begin
     if o1.site == o2.site
@@ -68,5 +68,3 @@ commutator(o1::Op, o2::Op) = begin
         return commutator(OpChain(o1, o2), OpChain(o2, o1))
     end
 end
-
-basis_info(op::Op) = [op.site => size(op.mat)]
