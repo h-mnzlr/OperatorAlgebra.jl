@@ -54,7 +54,9 @@ Base.zero(op::Op) = Op(zero(op.mat), op.site)
 Base.iszero(A::Op) = iszero(A.mat)
 Base.isone(A::Op) = isone(A.mat)
 
-Base.isequal(A::Op) = B -> B isa Op && isequal(A.site, B.site) && isequal(A.mat, B.mat)
+# Structural equality, as `isequal` is expected to provide. `==` is deliberately left at
+# its default, since two operators can be equal without being written the same way.
+Base.isequal(A::Op, B::Op) = isequal(A.site, B.site) && isequal(A.mat, B.mat)
 
 Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} =
     Op{Tid,Tmat}(convert(AbstractMatrix{Tmat}, A.mat), A.site)

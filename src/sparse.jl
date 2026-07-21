@@ -1,6 +1,5 @@
 """
-    sparse(op::AbstractOp)
-    sparse(op::AbstractOp, bi::AbstractVector{<:Pair})
+    sparse(op::AbstractOp[, bi::AbstractVector{<:Pair}])
 
 Convert an operator to its full sparse matrix representation on a tensor product space.
 
@@ -32,5 +31,4 @@ H_matrix = sparse(H)  # equivalent to sparse(H, basis_info(H))
 
 See also: [`atsite`](@ref), [`basis_info`](@ref), `LinearMap`, [`OpSum`](@ref), [`OpChain`](@ref)
 """
-SparseArrays.sparse(op::AbstractOp, bi::AbstractVector{<:Pair}) = atsite(sparse, op, bi)
-SparseArrays.sparse(op::AbstractOp) = sparse(op, basis_info(op))
+SparseArrays.sparse(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op)) = atsite(sparse, op, bi)

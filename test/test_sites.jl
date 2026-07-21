@@ -3,14 +3,28 @@ using OperatorAlgebra
 using LinearAlgebra
 
 # not exported: the site interface is implementor-facing, atsite is opt-in
-using OperatorAlgebra: atsite, rawsite, withrawsite, left_id, right_id,
-                       AbstractSite, FermionSite, AnyonSite, sitetype
+using OperatorAlgebra: atsite, rawsite, withrawsite,
+                       AbstractSite, FermionSite, sitetype,
+                       ExchangeStyle, Commuting, Fermionic,
+                       exchange_style, site_parity, exchange_phase, exchange_string
 
-@testset "AbstractSite / FermionSite / AnyonSite" begin
+# A minimal custom site demonstrating the extensibility surface this file exercises: a
+# fermion-like site with a user-chosen exchange phase instead of the fixed -1. Declaring
+# just `exchange_style` and `exchange_phase` is enough to make every generic code path
+# (atsite, apply, normal_order, tr, mapsites, ...) work with no further modification.
+struct PhaseSite{Tid} <: AbstractSite{Tid}
+    site::Tid
+    phase::ComplexF64
+end
+OperatorAlgebra.exchange_style(::PhaseSite) = Fermionic()
+OperatorAlgebra.exchange_phase(s::PhaseSite) = s.phase
+phased(site, phase) = PhaseSite(site, ComplexF64(phase))
+
+@testset "AbstractSite / FermionSite / custom sites" begin
     @testset "rawsite" begin
         @test rawsite(1) == 1
         @test rawsite(fermion(1)) == 1
-        @test rawsite(anyon(:a, PAULI_Z, PAULI_Z)) == :a
+        @test rawsite(phased(:a, -1)) == :a
     end
 
     @testset "equality, hash, ordering" begin
@@ -24,7 +38,7 @@ using OperatorAlgebra: atsite, rawsite, withrawsite, left_id, right_id,
         @test sort([fermion(2), fermion(1)]) == [fermion(1), fermion(2)]
 
         # different tags on the same raw site are never equal to each other
-        @test fermion(1) != anyon(1, PAULI_Z, PAULI_Z)
+        @test fermion(1) != phased(1, -1)
 
         d = Dict(fermion(1) => "a")
         d[fermion(1)] = "b"
@@ -32,21 +46,24 @@ using OperatorAlgebra: atsite, rawsite, withrawsite, left_id, right_id,
         @test d[fermion(1)] == "b"
     end
 
-    @testset "left_id/right_id defaults for bare (untagged) sites" begin
-        op = Op([1 2; 3 4], 1)
-        @test left_id(op) == I(2)
-        @test right_id(op) == I(2)
-
-        op3 = Op(rand(3, 3), :a)
-        @test left_id(op3) == I(3)
-        @test right_id(op3) == I(3)
+    @testset "ExchangeStyle defaults" begin
+        @test exchange_style(1) isa Commuting
+        @test exchange_style(:a) isa Commuting
+        @test exchange_style(fermion(1)) isa Fermionic
+        @test exchange_phase(1) == 1
+        @test exchange_phase(fermion(1)) == -1
+        @test exchange_string(1, 2) == I(2)
+        @test exchange_string(1, 3) == I(3)
+        @test exchange_string(fermion(1), 2) == PAULI_Z
+        @test site_parity(1, 3) == zeros(Int, 3)
+        @test site_parity(fermion(1), 2) == [0, 1]
     end
 
     @testset "fermion() tags sites and carries the Jordan-Wigner matrix" begin
         c = fermion(Op(RAISE, 1))
         @test c.site isa FermionSite
         @test rawsite(c.site) == 1
-        @test left_id(c) == PAULI_Z
+        @test exchange_string(c.site, 2) == PAULI_Z
 
         # fermion() distributes over OpChain/OpSum, tagging every factor/term
         chain = fermion(Op(RAISE, 1) * Op(LOWER, 2))
@@ -56,39 +73,39 @@ using OperatorAlgebra: atsite, rawsite, withrawsite, left_id, right_id,
         @test all(o.site isa FermionSite for o in os.ops)
     end
 
-    @testset "anyon() tags sites with custom left/right matrices" begin
-        L = [1.0 0.0; 0.0 -1.0]
-        R = [0.0 1.0; 1.0 0.0]
-        a = anyon(Op([1 0; 0 2], 5), L, R)
-        @test a.site isa AnyonSite
-        @test left_id(a) == L
-        @test right_id(a) == R
+    @testset "custom Fermionic site with a non-fermionic phase" begin
+        s = phased(5, -1im)
+        @test exchange_style(s) isa Fermionic
+        @test exchange_phase(s) == -1im
+        @test exchange_string(s, 2) == diagm([1, -1im])
 
-        chain = anyon(Op(RAISE, 1) * Op(LOWER, 2), L, R)
-        @test all(o.site isa AnyonSite for o in chain.ops)
+        op = Op([1 0; 0 2], s)
+        @test op.site isa PhaseSite
+
+        chain = Op(RAISE, phased(1, -1im)) * Op(LOWER, phased(2, -1im))
+        @test all(o.site isa PhaseSite for o in chain.ops)
     end
 
-    @testset "atsite automatically picks up left_id/right_id" begin
+    @testset "atsite automatically picks up exchange_string" begin
         bi = [fermion(1) => 2, fermion(2) => 2, fermion(3) => 2]
 
         # A fermionic operator on the first site of the basis has no sites to its left,
-        # so only right_id (identity, under this package's single-sided JW convention)
-        # is exercised; embedding it should be unaffected by the tagging.
+        # so the string never enters (this package's single-sided JW convention only
+        # ever puts a string on preceding sites); embedding it is unaffected by tagging.
         c1 = fermion(Op(RAISE, 1))
         @test atsite(Matrix, c1, bi) == kron(RAISE, I(2), I(2))
 
-        # A fermionic operator further along the basis picks up the left_id (PAULI_Z)
-        # string for every site before it.
+        # A fermionic operator further along the basis picks up the exchange_string
+        # (PAULI_Z) for every site before it.
         c3 = fermion(Op(RAISE, 3))
         @test atsite(Matrix, c3, bi) == kron(PAULI_Z, PAULI_Z, RAISE)
     end
 
-    @testset "atsite with custom anyon left/right matrices" begin
-        L = [1.0 0.0; 0.0 -1.0]
-        R = [0.0 1.0; 1.0 0.0]
-        bi = [anyon(1, L, R) => 2, anyon(2, L, R) => 2, anyon(3, L, R) => 2]
-        op = anyon(Op([0 1; 1 0], 2), L, R)
-        @test atsite(Matrix, op, bi) == kron(L, [0 1; 1 0], R)
+    @testset "atsite with a custom Fermionic site's exchange_string" begin
+        s2 = phased(2, -1im)
+        bi = [phased(1, -1im) => 2, s2 => 2, phased(3, -1im) => 2]
+        op = Op([0 1; 1 0], s2)
+        @test atsite(Matrix, op, bi) == kron(exchange_string(phased(1, -1im), 2), [0 1; 1 0], I(2))
     end
 
     @testset "sites()/basis_info() see the tagged site, not the raw identifier" begin
@@ -430,9 +447,6 @@ end
 end
 
 @testset "mapsites() Function Tests" begin
-    L = [1.0 0.0; 0.0 -1.0]
-    R = [0.0 1.0; 1.0 0.0]
-
     @testset "Op site mapping" begin
         @testset "Shifting an Int site" begin
             @test mapsites(s -> s + 1, Op(PAULI_X, 1)).site == 2
@@ -534,14 +548,14 @@ end
         @testset "Jordan-Wigner string survives relabeling" begin
             result = mapsites(s -> s + 1, fermion(Op(RAISE, 1)))
             @test result.site isa FermionSite
-            @test left_id(result) == PAULI_Z
+            @test exchange_string(result.site, 2) == PAULI_Z
         end
 
-        @testset "Anyonic site keeps its custom left_id/right_id" begin
-            result = mapsites(s -> s + 1, anyon(Op([1 0; 0 2], 5), L, R))
+        @testset "Custom Fermionic site keeps its exchange_phase" begin
+            result = mapsites(s -> s + 1, Op([1 0; 0 2], phased(5, -1im)))
             @test rawsite(result.site) == 6
-            @test left_id(result) == L
-            @test right_id(result) == R
+            @test result.site isa PhaseSite
+            @test exchange_phase(result.site) == -1im
         end
 
         @testset "Mixed bosonic + fermionic expression" begin
@@ -566,16 +580,15 @@ end
             @test withrawsite(fermion(1), rawsite(fermion(1))) == fermion(1)
         end
 
-        @testset "AnyonSite" begin
-            a = anyon(1, L, R)
+        @testset "Custom Fermionic site (PhaseSite)" begin
+            a = phased(1, -1im)
             @test withrawsite(a, rawsite(a)) == a
         end
 
-        @testset "Relabeling keeps the anyon matrices" begin
-            a = anyon(1, L, R)
+        @testset "Relabeling keeps the custom site's phase" begin
+            a = phased(1, -1im)
             @test rawsite(withrawsite(a, 9)) == 9
-            @test withrawsite(a, 9).left_id == L
-            @test withrawsite(a, 9).right_id == R
+            @test withrawsite(a, 9).phase == -1im
         end
     end
 
@@ -584,8 +597,8 @@ end
             @test_throws ArgumentError mapsites(fermion, Op(PAULI_X, 1))
         end
 
-        @testset "Returning an AnyonSite throws" begin
-            @test_throws ArgumentError mapsites(s -> anyon(s, L, R), Op(PAULI_X, 1))
+        @testset "Returning a custom AbstractSite throws" begin
+            @test_throws ArgumentError mapsites(s -> phased(s, -1im), Op(PAULI_X, 1))
         end
     end
 
@@ -673,7 +686,7 @@ end
         end
     end
 
-    @testset "fermion/anyon still distribute over nested structures" begin
+    @testset "fermion still distributes over nested structures" begin
         @testset "fermion over an OpSum of OpChains" begin
             H = OpSum(Op(RAISE, 1) * Op(LOWER, 2), Op(PAULI_Z, 3))
             fH = fermion(H)
@@ -681,13 +694,6 @@ end
             @test fH.ops[1] isa OpChain
             @test all(o.site isa FermionSite for o in fH.ops[1].ops)
             @test fH.ops[2].site isa FermionSite
-        end
-
-        @testset "anyon over an OpSum of OpChains" begin
-            H = OpSum(Op(RAISE, 1) * Op(LOWER, 2), Op(PAULI_Z, 3))
-            aH = anyon(H, L, R)
-            @test aH isa OpSum
-            @test all(o.site isa AnyonSite for o in aH.ops[1].ops)
         end
 
         @testset "fermion on an empty OpChain does not error" begin

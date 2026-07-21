@@ -37,6 +37,11 @@ Base.:/(A::AbstractOp, s::Number) = inv(s) * A
 
 Base.:-(A::AbstractOp, B::AbstractOp) = A + -B
 
+Base.isequal(A::AbstractOp, B::AbstractOp) = false
+Base.:(==)(A::AbstractOp, B::AbstractOp) = norm(A - B) == 0.0
+Base.isapprox(A::AbstractOp, B::AbstractOp; kwargs...) = isapprox(norm(A - B), 0.0; kwargs...)
+Base.eps(A::AbstractOp) = eps(eltype(A))
+
 Base.convert(::Type{AbstractOp{Tid,Tmat}}, op::Top) where {Tid,Tmat,Top} = convert(Top.name.wrapper{Tid,Tmat}, op)
 
 # Default iszero implementation

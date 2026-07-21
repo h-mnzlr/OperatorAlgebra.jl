@@ -417,85 +417,194 @@ end
 
 """
     normal_order(op::AbstractOp)
-    normal_order(op::AbstractOp{Tid}, basis::Vector{Tid})
-    normal_order(op::AbstractOp{Tid}, basis::Vector{Tid}, ids::Vector{<:AbstractMatrix})
+    normal_order(op::AbstractOp, bi::AbstractVector{<:Pair})
 
-Return a simplified normal-ordered version of the operator (see `simplify`). In particular this means, that if sites are given by a sortable type,
-the operators are sorted by their site identifiers. If a `basis` is provided, the operators are sorted according to the order of sites in the `basis`.
-Furthermore, it is possible to specify commutation relations by providing the specific identity relevant for the commutation on a given side.
-The commutation relations are then inferred through the commutator of the operator with the identity on the other side, i.e., for fermions the identity operators should be `PAULI_Z` for all fermionic local hilbert spaces in the basis.
+Return `op` with the factors of each product reordered to follow the site order of `bi`, a
+`site => dim` basis description as returned by [`basis_info`](@ref). Called without `bi`,
+the basis is derived from the operator itself, exactly as for `sparse`/`Array`.
+
+A factor moving past a [`Commuting`](@ref) site (the default for any untagged/bosonic site)
+commutes freely, so factors are stably sorted by basis position without picking up any
+signs. Moving a factor past a [`NonCommuting`](@ref) site conjugates *that site's own*
+factor by the site's [`exchange_string`](@ref): entries connecting two basis states of the
+same [`site_parity`](@ref) (in particular the whole diagonal) pass through untouched, and
+entries connecting different parities pick up [`exchange_phase`](@ref) λ or `1/λ`, depending
+on direction; the moving factor is split too (into a part that commutes freely and a part
+that triggers this conjugation), but contributes no phase of its own, since which site is
+doing the crossing never matters, only which site is being crossed. This recovers, for two
+fermionic sites (λ = -1, self-inverse), `{c_i, c_j} = 0` for `i ≠ j`, holding at the operator
+level so no Jordan-Wigner strings enter here (those belong to [`atsite`](@ref)'s embedding,
+not to this same-position reordering): e.g. `c2 * c1` normal-orders to `(-c1) * c2`; even
+factors (`n`, `1-n`, identity) commute freely with everything. When both exchanged factors
+mix even and odd parts the product no longer factors, and the chain branches into an
+[`OpSum`](@ref) of chains, each ordered further. A custom site type gets this for free by
+implementing [`ExchangeStyle`](@ref): declare `exchange_style(::MySite) = NonCommuting()`
+and (optionally) override `exchange_phase`/`site_parity` for anything beyond the fermionic
+default.
+
+Factors on the same site do not commute in general and keep their chain order; they
+are left as separate adjacent factors -- follow with [`simplify`](@ref) to merge
+them. A nested `OpChain`/`OpSum` factor is normal-ordered in place but acts as a
+barrier that no factor is sorted across, since it may share sites with its
+neighbors. The terms of an [`OpSum`](@ref) are each normal-ordered and then sorted
+by the sites they act on.
+
+Normal ordering never changes the operator, only how it is written:
+
+    atsite(normal_order(op, bi), bi) == atsite(op, bi)
+
+# Examples
+```julia
+normal_order(Op(PAULI_Z, 2) * Op(PAULI_X, 1))  # X1 * Z2: reordered, unchanged matrices
+
+a, b = Op([1 2; 3 4], 1), Op([5 6; 7 8], 1)
+normal_order(a * Op(PAULI_X, 2) * b)        # a1 * b1 * X2: same-site order preserved
+
+c1 = fermion(Op(LOWER, 1))
+c2d = fermion(Op(RAISE, 2))
+normal_order(c2d * c1)                      # (-c1) * c2d, sign picked up automatically
+
+n2 = fermion(Op(OCC_PART, 2))
+normal_order(n2 * c1)                       # c1 * n2, no sign: n is even
+```
+
+See also: [`simplify`](@ref), [`basis_info`](@ref), [`atsite`](@ref),
+[`AbstractSite`](@ref)
 """
-function normal_order(op::AbstractOp; kwargs...)
-    basis = collect(sites(op))
-    _sort_if_sortable!(basis)
-    normal_order(op, basis; kwargs...)
+normal_order(op::AbstractOp) = normal_order(op, basis_info(op))
+
+normal_order(op::AbstractOp, bi::AbstractVector{<:Pair}) = begin
+    basis = first.(bi)
+    for s in sites(op)
+        any(==(s), basis) || throw(ArgumentError("Site $s not found in basis"))
+    end
+    _normal_order(op, Dict(s => i for (i, s) in enumerate(basis)))
 end
 
-function normal_order(op::AbstractOp{Tid}, basis::Vector{Tid}; ids=_default_ids(op, basis), strings=ids) where {Tid}
-    # assert all sites in the operator are present in the basis
-    all(collect(sites(op)) .∈ Ref(basis)) || throw(ArgumentError("All sites in the operator must be present in the basis"))
-    # assert basis and ids have the same length
-    length(basis) == length(ids) || throw(ArgumentError("basis and ids must have the same length"))
-    # assert all ids are diagonal
-    all(_isdiag, ids) || throw(ArgumentError("All ids must be diagonal matrices"))
-
-    sop = simplify(op)
-    simplify(_normal_order(sop, basis, ids))
+# The exchange primitive the ordering algorithm relies on -- the only place commutation
+# rules enter. `_exchange_factors` is called on `(A, B) = (ops[i], ops[i+1])` exactly when
+# they're out of order, i.e. A sits at a *higher* basis position than B (A needs to end up on
+# the right). It must return (B'_k, A'_k) pairs such that the chain [B'_k, A'_k] -- when
+# LATER embedded by the ordinary `atsite`, exactly as any other chain -- reproduces `A * B`.
+# That "later, ordinary embedding" is the crux: `A'_k` (built from A's own site) picks up its
+# OWN exchange_string from B's site automatically, the same as any operator does when it sits
+# after a NonCommuting site, so B'_k must already be *conjugated* to compensate:
+#
+#     A * B = B * A_even  +  (S B_odd S⁻¹) * A_odd,   S = exchange_string(B.site, dim)
+#
+# Entrywise, conjugation by the diagonal S = diagm(λ.^p) (p = site_parity(B.site,dim),
+# λ = exchange_phase(B.site)) is `B[i,j] * λ^(p[i]-p[j])`: unchanged on the diagonal and
+# same-parity entries (λ^0 = 1, so B_even passes through untouched, hence no need to add it
+# back separately), and rescaled by λ or 1/λ on the two off-diagonal directions between a
+# lower- and higher-parity index. λ == 1 (B's site is `Commuting`, or `NonCommuting` with a
+# trivial phase override) needs no split at all -- a plain swap is exact and cheap, the common
+# case for most chains.
+#
+# A previous version of this used the much simpler-looking `B_even + λ B_odd` (scaling *all*
+# of B_odd by the same λ, not conjugating). That is WRONG in general -- it silently canceled
+# out to the right answer only for the historically sole tested case, λ = -1 with a purely
+# 2-index parity, because conjugation by an involution (S = S⁻¹) happens to coincide with a
+# uniform λ-scaling there. It was invisible to extensive fermionic (λ = -1) testing and broke
+# immediately for any other `exchange_phase`, e.g. a custom site with `im` or a genuine
+# complex phase -- a cautionary example for why a "verified" formula still needs testing away
+# from the one concrete instance (FermionSite) that motivated it.
+#
+# `1/λ` is computed via `inv`, which promotes an exact `Int` λ = -1 to `Float64` (Julia's `^`
+# and `inv` do not special-case that `-1` is its own exact inverse) -- special-cased to keep
+# the common fermionic case free of unnecessary float promotion, matching `_parity_split`'s
+# same exactness goal.
+_exchange_factors(A::Op, B::Op) = begin
+    λ = exchange_phase(B.site)
+    isone(λ) && return Tuple{Op,Op}[(B, A)]
+    Ae, Ao = _parity_split(A.mat)
+    invλ = λ == -1 ? λ : inv(λ)
+    p = site_parity(B.site, size(B.mat, 1))
+    Bnew = [B.mat[i, j] * _phasepow(λ, invλ, p[i] - p[j]) for i in axes(B.mat, 1), j in axes(B.mat, 2)]
+    Tuple{Op,Op}[(B, Op(Ae, A.site)), (Op(Bnew, B.site), Op(Ao, A.site))]
 end
 
-_normal_order(op::Op, args...; kwargs...) = op
-function _normal_order(oc::OpChain{Tid,Tmat}, basis::AbstractVector{Tid}; ids, strings=ids) where {Tid,Tmat}
-    index_map = Dict(s => i for (i, s) in enumerate(basis))
-    id_map = Dict(s => ids[i] for (i, s) in enumerate(basis))
-    string_map = Dict(s => strings[i] for (i, s) in enumerate(basis))
+_phasepow(λ, invλ, k::Integer) = k == 0 ? one(λ) : k == 1 ? λ : k == -1 ? invλ : λ^k
 
-    # use a bubble sort-like approach to sort the operators according to the basis order, while applying the relevant commutation relations
-    ordered = collect(oc.ops)
+# Chains are ordered by a stepping algorithm: resolve the first out-of-order
+# adjacent pair of single-site factors with `_exchange_factors`, repeat until no
+# pair is out of order -- the ordered fixpoint. The steps are adjacent
+# transpositions, so factors on the same site keep their chain order. An exchange
+# that does not factor back into a single product branches the chain into one
+# chain per pair, each stepped further, dropping zero branches immediately. Nested
+# OpSum/OpChain factors are barriers -- pairs containing one never swap. Every
+# swap removes one inversion in each branch, so the fixpoint is reached after
+# finitely many steps.
+_normal_order(o::Op, pos) = o
 
-    n = length(ordered)
-    for pass in 1:max(0, n - 1)
-        for i in 1:(n - pass)
-            li = index_map[ordered[i].site]
-            ri = index_map[ordered[i+1].site]
-            if li > ri
-                ordered[i].mat = ordered[i].mat * id_map[ordered[i+1].site]
-                ordered[i+1].mat = string_map[ordered[i].site] * ordered[i+1].mat
-                ordered[i], ordered[i + 1] = ordered[i + 1], ordered[i]
-            end
+function _normal_order(oc::OpChain, pos)
+    queue = Vector{AbstractOp}[AbstractOp[_normal_order(o, pos) for o in oc.ops]]
+    ordered = AbstractOp[]
+    while !isempty(queue)
+        ops = popfirst!(queue)
+        i = findfirst(
+            k -> ops[k] isa Op && ops[k+1] isa Op && pos[ops[k].site] > pos[ops[k+1].site],
+            1:length(ops)-1,
+        )
+        if isnothing(i)
+            push!(ordered, OpChain(ops))
+            continue
+        end
+        for (Bnew, Anew) in _exchange_factors(ops[i], ops[i+1])
+            (iszero(Bnew) || iszero(Anew)) && continue
+            branch = copy(ops)
+            branch[i], branch[i+1] = Bnew, Anew
+            push!(queue, branch)
         end
     end
 
-    OpChain(ordered...)
+    length(ordered) == 1 && return only(ordered)
+    isempty(ordered) && return _zero_term(oc)   # every branch vanished
+    OpSum(ordered[sortperm(ordered; by=t -> _term_key(t, pos))])
 end
 
-function _normal_order(os::OpSum{Tid,Tmat}, basis::Vector{Tid}; ids, strings=ids) where {Tid,Tmat}
-    # normal order each term in the sum recursively
-    terms = [_normal_order(term, basis; ids, strings) for term in os.ops]
-    sumsafe = simplify(OpSum(terms...))
-
-    # last, sort the terms in the sum according to the first site in their site pattern, using the basis order
-    index_map = Dict(s => i for (i, s) in enumerate(basis))
-    term_key(term) = begin
-        map(term.ops) do o
-            fs = first(term.ops).site
-            get(index_map, fs, typemax(Int))
-        end |> Tuple
+function _normal_order(os::OpSum, pos)
+    # chains whose exchanges branched normal-order into sums: flatten those into
+    # the term list before sorting
+    terms = AbstractOp[]
+    for t in os.ops
+        nt = _normal_order(t, pos)
+        nt isa OpSum ? append!(terms, nt.ops) : push!(terms, nt)
     end
-    term_key(o::Op) = (get(index_map, o.site, typemax(Int)),)
-
-    sortidx = sortperm(sumsafe.ops; by=term_key)
-    OpSum(sumsafe.ops[sortidx]...)
+    OpSum(terms[sortperm(terms; by=t -> _term_key(t, pos))])
 end
 
-function _default_ids(op::AbstractOp{Tid,Tmat}, basis::Vector{Tid}) where {Tid,Tmat}
-    terms = _flatten_to_op_terms(simplify(op))
-    all_ops = vcat(terms...)
+_term_key(t, pos) = Tuple(sort!([pos[s] for s in sites(t)]))
 
-    default_dim = isempty(all_ops) ? 2 : size(first(all_ops).mat, 1)
-    dim_map = Dict{Tid,Int}()
-    for o in all_ops
-        dim_map[o.site] = size(o.mat, 1)
+"""
+    flattenop(op::AbstractOp)
+
+Rewrite `op` in sum-of-products normal form: an `OpSum` whose terms are `OpChain`s
+of `Op` factors, with no further nesting. Single-factor terms stay bare `Op`s rather
+than being wrapped in a one-element `OpChain`, matching the normal form `simplify`
+produces (see `_optype_simplification_rule`).
+
+Products of sums are distributed, `(A + B) * C == A * C + B * C`, so a chain with
+nested sums expands into the product of those sums' lengths in terms. Factor order
+within each chain is preserved, as required for non-commuting operators.
+
+# Example
+```julia
+σx, σy, σz = Op(PAULI_X, 1), Op(PAULI_Y, 2), Op(PAULI_Z, 3)
+flattenop((σx + σy) * σz)   # OpSum(OpChain(σx, σz), OpChain(σy, σz))
+flattenop(σx + σy)          # OpSum(σx, σy), not OpSum(OpChain(σx), OpChain(σy))
+```
+
+See also: [`simplify`](@ref), [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref)
+"""
+flattenop(op::AbstractOp) = OpSum(AbstractOp[_chain_rest(t) for t in _terms(op)])
+
+# factor lists of the expanded chains, one entry per term of the resulting sum
+_terms(o::Op) = [AbstractOp[o]]
+_terms(os::OpSum) =
+    isempty(os.ops) ? Vector{AbstractOp}[] : reduce(vcat, _terms(o) for o in os.ops)
+_terms(oc::OpChain) = begin
+    isempty(oc.ops) && return [AbstractOp[]]
+    reduce(_terms(o) for o in oc.ops) do left, right
+        [vcat(l, r) for l in left for r in right]
     end
-
-    [Matrix(I, get(dim_map, s, default_dim), get(dim_map, s, default_dim)) for s in basis]
 end

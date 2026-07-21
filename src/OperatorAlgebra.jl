@@ -18,20 +18,32 @@ acting on tensor product spaces, with support for:
 - [`OpSum`](@ref): Sum of operators (A + B + C)
 
 # Key Functions
-- [`apply`](@ref), [`apply!`](@ref): Apply operators to product states
+- [`apply`](@ref), [`apply!`](@ref): Apply operators to product states (allocating/in-place)
+- [`compile_apply`](@ref), [`compile_apply!`](@ref): Same, but pre-compile a specialized
+  kernel for a fixed operator (allocating/in-place)
 - [`atsite`](@ref): Extend operator to full Hilbert space, given a `site => dim` basis
   description as returned by [`basis_info`](@ref)
 - `sparse`: Convert to sparse matrix representation
 - `LinearMap`: Create matrix-free representation
-- [`fermion`](@ref), [`anyon`](@ref): Tag a site (or a whole operator/chain/sum) with
-  non-trivial commutation relations; see [`AbstractSite`](@ref) for the general API and
-  [`normal_order`](@ref)/[`atsite`](@ref) for where it is used
+- [`fermion`](@ref): Tag a site (or a whole operator/chain/sum) as fermionic; see
+  [`AbstractSite`](@ref)/[`ExchangeStyle`](@ref) for defining a custom site with its own
+  commutation relations, and [`normal_order`](@ref)/[`atsite`](@ref) for where it is used
 
 # Predefined Operators
 Common quantum operators are exported as constants:
 - Pauli matrices: `PAULI_X`, `PAULI_Y`, `PAULI_Z`
 - Creation/annihilation: `RAISE`, `LOWER`
 - Occupation operators: `OCC_PART`, `OCC_HOLE`
+
+# Custom Sites
+Sites are plain identifiers (`Int`, `Symbol`, tuples, ...) by default, and every operation
+(`atsite`, `apply`, `compile_apply`, `normal_order`, `tr`, ...) already works with them as
+ordinary commuting (bosonic/distinguishable) degrees of freedom. A site with different
+commutation relations is a subtype of [`AbstractSite`](@ref) that declares its
+[`ExchangeStyle`](@ref) -- [`fermion`](@ref)/[`FermionSite`](@ref) is the built-in example.
+Declaring `exchange_style(::MySite) = NonCommuting()` (and, if needed, overriding
+[`exchange_phase`](@ref)/[`site_parity`](@ref) beyond the fermionic default) is enough to use
+`MySite` throughout the package's infrastructure with no further changes to any of it.
 
 # Example
 ```julia
@@ -62,10 +74,10 @@ using LinearMaps
 export AbstractOp, Op, OpChain, OpSum
 export basis_info, sites, simplify, normal_order, commutator
 
-export PAULI_X, PAULI_Y, PAULI_Z, SPIN_X, SPIN_Y, SPIN_Z, I2, RAISE, LOWER, OCC_PART, OCC_HOLE
-export apply, apply!
+export PAULI_X, PAULI_Y, PAULI_Z, SPIN_X, SPIN_Y, SPIN_Z, RAISE, LOWER, OCC_PART, OCC_HOLE
+export apply, apply!, compile_apply, compile_apply!
 
-export fermion, anyon, mapsites
+export fermion, mapsites
 
 include("abstract.jl")
 include("op.jl")
@@ -79,6 +91,7 @@ include("linalg.jl")
 include("array.jl")
 include("sparse.jl")
 include("apply.jl")
+include("apply_compiled.jl")
 include("linearmap.jl")
 include("simplify.jl")
 include("latexify.jl")

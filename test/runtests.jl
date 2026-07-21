@@ -16,6 +16,9 @@ using OperatorAlgebra
     
     @info "Testing Kronecker products..."
     include("test_kron.jl")
+
+    @info "Testing Jordan-Wigner parity splitting..."
+    include("test_jw_parity.jl")
     
     @info "Testing sparse matrix conversions..."
     include("test_sparse.jl")
@@ -36,7 +39,7 @@ using OperatorAlgebra
     include("test_simplify.jl")
 
     @info "Testing normal_order()..."
-    #include("test_normal_order.jl")
+    include("test_normal_order.jl")
     
     @info "Testing apply operations..."
     include("test_apply.jl")

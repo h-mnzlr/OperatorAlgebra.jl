@@ -87,7 +87,8 @@ Base.zero(os::OpSum) = OpSum(zero(first(os.ops)))
 Base.iszero(os::OpSum) = isempty(os.ops) ? true : all(iszero(op) for op in os.ops)
 Base.isone(os::OpSum) = length(os.ops) == 1 && isone(only(os.ops))
 
-Base.isequal(os::OpSum) = B -> B isa OpSum && length(os.ops) == length(B.ops) && all(isequal.(os.ops, B.ops))
+Base.isequal(a::OpSum, b::OpSum) =
+    length(a.ops) == length(b.ops) && all(isequal(x, y) for (x, y) in zip(a.ops, b.ops))
 
 Base.convert(::Type{OpSum{Tid,Tmat}}, os::OpSum) where {Tid,Tmat} = OpSum{Tid,Tmat}(os.ops)
 
