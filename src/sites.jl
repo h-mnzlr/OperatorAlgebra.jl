@@ -133,7 +133,7 @@ Subtypes must implement:
   `rawsite`, used by [`mapsites`](@ref) to relabel a site without losing its tag). Optional: the
   generic fallback already covers any subtype that stores its identifier in a field named `site`.
 
-By default, any `AbstractSite` subtype is [`NonCommuting`](@ref) with fermionic statistics
+By default, any `AbstractSite` subtype is [`Fermionic`](@ref) with fermionic statistics
 (occupation-number parity, exchange phase `-1`) -- exactly what [`FermionSite`](@ref) needs,
 so it defines nothing beyond that. A custom site with different (or no) special statistics
 overrides [`exchange_style`](@ref), [`site_parity`](@ref) and/or [`exchange_phase`](@ref)
@@ -188,7 +188,7 @@ Trait describing how operators on a site behave under exchange. Two styles exist
   This is the ordinary (bosonic/distinguishable) case and the default for any bare site
   identifier. It selects a fast path throughout the package: no parity splitting, no string
   factors, no branching in [`normal_order`](@ref).
-- [`NonCommuting`](@ref): each local basis state of the site is even or odd
+- [`Fermionic`](@ref): each local basis state of the site is even or odd
   ([`site_parity`](@ref)), and odd components pick up a phase when they cross odd components
   elsewhere. This is the general path; [`FermionSite`](@ref) is the provided instance.
 
@@ -208,7 +208,7 @@ Operators on this site commute with operators on all other sites. See [`Exchange
 struct Commuting <: ExchangeStyle end
 
 """
-    NonCommuting <: ExchangeStyle
+    Fermionic <: ExchangeStyle
 
 The site's local basis states each carry a parity ([`site_parity`](@ref)), and its odd
 component contributes [`exchange_phase`](@ref) when something is reordered across it. See
@@ -220,7 +220,7 @@ struct Fermionic <: ExchangeStyle end
     exchange_style(site) -> ExchangeStyle
 
 Return the [`ExchangeStyle`](@ref) of `site`. Bare identifiers are [`Commuting`](@ref);
-[`AbstractSite`](@ref) subtypes default to [`NonCommuting`](@ref).
+[`AbstractSite`](@ref) subtypes default to [`Fermionic`](@ref).
 
 A custom site type that is really just a label (no unusual statistics) should declare
 `exchange_style(::MySite) = Commuting()` to stay on the fast path.
@@ -238,7 +238,7 @@ across it as a *spectator* (see [`atsite`](@ref)). It does not affect how an ope
 diagonal/off-diagonal entries, independent of any site's parity assignment.
 
 [`Commuting`](@ref) sites default to all-even (`zeros(dim)`), giving the ordinary identity
-string. The default for a [`NonCommuting`](@ref) site is occupation-number parity,
+string. The default for a [`Fermionic`](@ref) site is occupation-number parity,
 `[0, 1, 0, 1, ...]`, which for the usual 2-dimensional (empty/occupied) site is `[0, 1]` --
 override it for a site whose basis packs quantum numbers differently.
 

@@ -43,7 +43,7 @@ _term_spec(term::Vector{<:Op}, bi, max_combos) = begin
     # general: it relies on `exchange_string(s,d)^2 == I`, true for the standard fermionic
     # phase (-1, an involution) but not for an arbitrary custom `exchange_phase` (see
     # `_exchange_factors` in simplify.jl for the same phenomenon in `normal_order`) -- a
-    # "local" term on a non-involutory `NonCommuting` site can genuinely retain a string
+    # "local" term on a non-involutory `Fermionic` site can genuinely retain a string
     # across every preceding site.
     filter!(p -> !_isid(last(p)), merged)
 
@@ -79,7 +79,7 @@ _apply_spec(op::AbstractOp, bi, max_combos) =
 # --- expression generation from a spec --------------------------------------------------
 #
 # A factor's matrix is *diagonal* (e.g. any `exchange_string`, and hence a whole uncancelled
-# Jordan-Wigner tail on a custom, non-involutory `NonCommuting` site -- see `_term_spec`
+# Jordan-Wigner tail on a custom, non-involutory `Fermionic` site -- see `_term_spec`
 # above) exactly when its only nonzero entries have `kc[l] == jc[l]`: crossing it never
 # mixes basis states, only rescales them by a value that depends solely on the local digit.
 # The "dense" combo-unrolling below (`_term_body`, `_gather_branch`/`_gather_leaf`) is
@@ -395,7 +395,7 @@ output entry exactly once, so the index range is partitioned across tasks withou
 synchronization. Threading pays off for large Hilbert spaces; for small ones the task
 overhead dominates, so prefer `threads = 1` there.
 
-Sites with a [`NonCommuting`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are
+Sites with a [`Fermionic`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are
 supported: their string factors are resolved into ordinary tensor-product terms before
 codegen, so a Jordan-Wigner tail simply becomes extra sites in a term. Diagonal factors
 (every `exchange_string` is diagonal) are handled by a runtime scalar lookup rather than

@@ -41,7 +41,7 @@ Sites are plain identifiers (`Int`, `Symbol`, tuples, ...) by default, and every
 ordinary commuting (bosonic/distinguishable) degrees of freedom. A site with different
 commutation relations is a subtype of [`AbstractSite`](@ref) that declares its
 [`ExchangeStyle`](@ref) -- [`fermion`](@ref)/[`FermionSite`](@ref) is the built-in example.
-Declaring `exchange_style(::MySite) = NonCommuting()` (and, if needed, overriding
+Declaring `exchange_style(::MySite) = Fermionic()` (and, if needed, overriding
 [`exchange_phase`](@ref)/[`site_parity`](@ref) beyond the fermionic default) is enough to use
 `MySite` throughout the package's infrastructure with no further changes to any of it.
 

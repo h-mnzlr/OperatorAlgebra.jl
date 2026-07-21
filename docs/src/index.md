@@ -57,6 +57,7 @@ Pages = [
     "examples.md",
     "api/types.md",
     "api/operations.md",
+    "api/sites.md",
     "api/constants.md",
 ]
 Depth = 2

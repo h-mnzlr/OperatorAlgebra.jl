@@ -425,7 +425,7 @@ the basis is derived from the operator itself, exactly as for `sparse`/`Array`.
 
 A factor moving past a [`Commuting`](@ref) site (the default for any untagged/bosonic site)
 commutes freely, so factors are stably sorted by basis position without picking up any
-signs. Moving a factor past a [`NonCommuting`](@ref) site conjugates *that site's own*
+signs. Moving a factor past a [`Fermionic`](@ref) site conjugates *that site's own*
 factor by the site's [`exchange_string`](@ref): entries connecting two basis states of the
 same [`site_parity`](@ref) (in particular the whole diagonal) pass through untouched, and
 entries connecting different parities pick up [`exchange_phase`](@ref) λ or `1/λ`, depending
@@ -438,7 +438,7 @@ not to this same-position reordering): e.g. `c2 * c1` normal-orders to `(-c1) * 
 factors (`n`, `1-n`, identity) commute freely with everything. When both exchanged factors
 mix even and odd parts the product no longer factors, and the chain branches into an
 [`OpSum`](@ref) of chains, each ordered further. A custom site type gets this for free by
-implementing [`ExchangeStyle`](@ref): declare `exchange_style(::MySite) = NonCommuting()`
+implementing [`ExchangeStyle`](@ref): declare `exchange_style(::MySite) = Fermionic()`
 and (optionally) override `exchange_phase`/`site_parity` for anything beyond the fermionic
 default.
 
@@ -488,7 +488,7 @@ end
 # LATER embedded by the ordinary `atsite`, exactly as any other chain -- reproduces `A * B`.
 # That "later, ordinary embedding" is the crux: `A'_k` (built from A's own site) picks up its
 # OWN exchange_string from B's site automatically, the same as any operator does when it sits
-# after a NonCommuting site, so B'_k must already be *conjugated* to compensate:
+# after a Fermionic site, so B'_k must already be *conjugated* to compensate:
 #
 #     A * B = B * A_even  +  (S B_odd S⁻¹) * A_odd,   S = exchange_string(B.site, dim)
 #
@@ -496,7 +496,7 @@ end
 # λ = exchange_phase(B.site)) is `B[i,j] * λ^(p[i]-p[j])`: unchanged on the diagonal and
 # same-parity entries (λ^0 = 1, so B_even passes through untouched, hence no need to add it
 # back separately), and rescaled by λ or 1/λ on the two off-diagonal directions between a
-# lower- and higher-parity index. λ == 1 (B's site is `Commuting`, or `NonCommuting` with a
+# lower- and higher-parity index. λ == 1 (B's site is `Commuting`, or `Fermionic` with a
 # trivial phase override) needs no split at all -- a plain swap is exact and cheap, the common
 # case for most chains.
 #

@@ -16,7 +16,7 @@ end
 # --- resolving non-commuting sites --------------------------------------------------------
 #
 # Everything below this point implements plain tensor-product semantics: a factor `Op(m, s)`
-# acts as `m` on `s` and as the identity everywhere else. A basis containing a `NonCommuting`
+# acts as `m` on `s` and as the identity everywhere else. A basis containing a `Fermionic`
 # site (see `ExchangeStyle` in sites.jl) does not obey that -- operators pick up string
 # factors on the *other* sites -- so the operator is rewritten into an equivalent expression
 # whose factors are all plain, using exactly the decomposition `atsite` uses:
@@ -26,13 +26,13 @@ end
 #
 # The even part commutes past every string and needs no padding; only the odd part picks up
 # strings. Note the split is on the *matrix*, not on the site's own style: an odd matrix on a
-# `Commuting` site still drags the strings of `NonCommuting` sites around it, which is why the
-# rewrite keys off `bi` containing a `NonCommuting` site rather than off the operator's own
+# `Commuting` site still drags the strings of `Fermionic` sites around it, which is why the
+# rewrite keys off `bi` containing a `Fermionic` site rather than off the operator's own
 # sites (see `_parity_split` in sites.jl for why). Identity string factors are dropped, so a
 # fermionic term keeps just its Jordan-Wigner tail.
 #
 # The rewrite reuses the original site identifiers, so it never has to invent names or worry
-# about a `NonCommuting` and a `Commuting` site sharing a raw identifier. Because `atsite` of
+# about a `Fermionic` and a `Commuting` site sharing a raw identifier. Because `atsite` of
 # a chain is the product of the factors' `atsite`s, expanding each factor independently is
 # exact for nested chains and sums alike.
 _isid(m) = size(m, 1) == size(m, 2) && m == I
@@ -136,7 +136,7 @@ bi = [1 => 2, 2 => 2]
 apply(Op(PAULI_X, 2), 1, bi)  # Dict(2 => 1.0): X₂|00⟩ = |01⟩
 ```
 
-Sites with a [`NonCommuting`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are
+Sites with a [`Fermionic`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are
 supported: their string factors are resolved exactly as in [`atsite`](@ref), so mixed
 non-commuting/commuting bases work too.
 
@@ -206,7 +206,7 @@ v = [1.0, 0.0, 0.0, 0.0]          # |00⟩
 apply(Op(PAULI_X, 2), v, bi)      # [0.0, 1.0, 0.0, 0.0]: |01⟩
 ```
 
-Sites with a [`NonCommuting`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are
+Sites with a [`Fermionic`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are
 supported: their string factors are resolved exactly as in [`atsite`](@ref), so mixed
 non-commuting/commuting bases work too.
 

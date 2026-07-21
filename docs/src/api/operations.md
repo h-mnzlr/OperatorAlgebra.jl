@@ -9,6 +9,8 @@ CurrentModule = OperatorAlgebra
 ```@docs
 atsite
 basis_info
+sites
+mapsites
 ```
 
 ## Applying Operators
@@ -16,6 +18,8 @@ basis_info
 ```@docs
 apply
 apply!
+compile_apply
+compile_apply!
 ```
 
 ## Matrix Representations
@@ -41,6 +45,14 @@ The `LinearMap` function from LinearMaps.jl is extended to work with operators:
 - `LinearMap(oc::OpChain, basis)`: Product of LinearMaps
 
 See the [Matrix Representations](../guide/matrix_representation.md) guide for examples.
+
+## Normal Ordering & Simplification
+
+```@docs
+normal_order
+simplify
+commutator
+```
 
 ## Linear Algebra Operations
 

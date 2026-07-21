@@ -24,7 +24,7 @@ of the operator contributes the product of its per-site traces, with untouched s
 contributing their dimension (trace of the identity). Consecutive factors on the same
 site are matrix-multiplied in chain order first; this requires the term to already be
 in normal order (same-site factors adjacent, with any exchange signs from
-[`Fermion`](@ref) sites already folded into the coefficients -- see
+[`FermionSite`](@ref) sites already folded into the coefficients -- see
 [`normal_order`](@ref)), which is why `tr` normal-orders every term before summing it
 (so e.g. a Jordan-Wigner string of traceless `PAULI_Z` factors correctly zeroes a term).
 Terms over an entirely [`Commuting`](@ref) basis skip that step, since reordering them
@@ -48,12 +48,12 @@ LinearAlgebra.tr(op::AbstractOp, bi::AbstractVector{<:Pair}) = begin
     pos = Dict(s => i for (i, s) in enumerate(basis))
 
     # Ordering the factors is only needed when exchanging two of them can change the
-    # term's value. If no site in the basis is `Fermion`, every site's `exchange_phase`
+    # term's value. If no site in the basis is `FermionSite`, every site's `exchange_phase`
     # is 1, so `_exchange_factors` is always a plain swap -- no sign, no branching -- and
     # `_tr` already groups the factors by site in chain order, so normal-ordering leaves
     # the trace untouched and we skip it. That matters: it is by far the dominant cost of
     # `tr` on operators with many terms. (This does *not* extend to a basis containing a
-    # `Fermion` site: reordering across it can pick up a sign that `_tr`'s naive per-site
+    # `FermionSite`: reordering across it can pick up a sign that `_tr`'s naive per-site
     # grouping would silently drop, exactly the bug `normal_order` exists to fix.)
     flat = flattenop(op)
     if _noncommuting_basis(bi)

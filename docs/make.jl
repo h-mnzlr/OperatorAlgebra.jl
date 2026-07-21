@@ -20,6 +20,7 @@ makedocs(
         "API Reference" => [
             "Types" => "api/types.md",
             "Operations" => "api/operations.md",
+            "Custom Sites" => "api/sites.md",
             "Constants" => "api/constants.md",
         ],
     ],

@@ -21,7 +21,7 @@ identity padding. Note this split applies to every operator regardless of its ow
 [`ExchangeStyle`](@ref) -- a bosonic operator sitting among fermionic sites still threads
 their strings, which is what makes chain multiplication of separately-embedded factors
 reproduce the correctly Jordan-Wigner-ordered product. If no site in `bi` is
-[`NonCommuting`](@ref) this reduces to plain identity padding and the split is skipped entirely.
+[`Fermionic`](@ref) this reduces to plain identity padding and the split is skipped entirely.
 
 # Arguments
 - `T`: Optional transformation function applied to `op.mat` (e.g., `sparse`)
