@@ -45,9 +45,7 @@ See the [Matrix Representations](../guide/matrix_representation.md) guide for ex
 ## Linear Algebra Operations
 
 ```@docs
-LinearAlgebra.tr(::Op, ::Any)
-LinearAlgebra.tr(::OpChain, ::Any)
-LinearAlgebra.tr(::OpSum, ::Any)
+LinearAlgebra.tr
 ```
 
 ## ITensorMPS Integration
