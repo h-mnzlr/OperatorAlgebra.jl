@@ -102,3 +102,15 @@ Base.show(io::IO, os::OpSum) = begin
     end
     print(io, "])")
 end
+Base.show(io::IO, ::MIME"text/plain", os::OpSum) = begin
+    println(io, "OpSum(ops=[")
+    for (i, op) in enumerate(os.ops)
+        print(io, "    ")
+        show(io, op)
+        if i < length(os.ops)
+            println(io, ", ")
+        end
+    end
+    println(io)
+    print(io, "])")
+end

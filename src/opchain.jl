@@ -101,3 +101,15 @@ Base.show(io::IO, oc::OpChain) = begin
     end
     print(io, "])")
 end
+Base.show(io::IO, ::MIME"text/plain", oc::OpChain) = begin
+    println(io, "OpChain(ops=[")
+    for (i, op) in enumerate(oc.ops)
+        print(io, "    ")
+        show(io, op)
+        if i < length(oc.ops)
+            println(io, ", ")
+        end
+    end
+    println(io)
+    print(io, "])")
+end
