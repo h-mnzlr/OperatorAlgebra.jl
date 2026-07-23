@@ -19,7 +19,11 @@ function _apply_op(o::Op, states)
         for (j, v) in enumerate(o.mat[:, i])
             iszero(v) && continue
             new_s = write(s, idx, j-1)  # j-1 due to conversion from index to bit
-            nstates[new_s] = v * ov
+            # Accumulate: two input states that differ only at `idx` can be mapped onto the
+            # same output state (whenever a row of `o.mat` has more than one entry), and
+            # their contributions have to be summed. This is what makes the intermediate
+            # index of a product of two operators on the same site be summed over.
+            nstates[new_s] = get(nstates, new_s, zero(valtype(nstates))) + v * ov
         end
     end
     nstates
@@ -37,14 +41,17 @@ function _apply_op(os::OpSum, states)
     for o in os.ops
         merge_states = _apply_op(o, states)
         for (s, v) in merge_states
-            ov = get(nstates, s, zero(eltype(o)))
+            ov = get(nstates, s, zero(valtype(nstates)))
             nstates[s] = v + ov
         end
     end
     
     _filter_too_small(nstates)
 end
-function _filter_too_small(vals_dict::Dict{T, Union{Tf, Complex{Tf}}}; cutoff=1e2 * eps(Tf)) where {T, Tf<:AbstractFloat}
+function _filter_too_small(
+    vals_dict::Dict{<:Any,Tv}; cutoff=1e2 * eps(real(Tv))
+) where {Tv<:Union{AbstractFloat,Complex{<:AbstractFloat}}}
+    isempty(vals_dict) && return vals_dict
     maxval = maximum(abs, values(vals_dict))
     filter(p -> abs(p[2]) > maxval * cutoff, vals_dict)
 end
@@ -94,15 +101,20 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true)
         end
 
         for (state2, v) in repr_states
+            # `state1` is the state H was applied to, so `v * norm_factor` is <state2|H|state1>
+            # and belongs into row `m`, column `n` -- not the other way around.
             n, m = b[state1], b[state2]
             norm_factor = sqrt(ba.norms[m]/ ba.norms[n])
-            push!(I_vec, n)
-            push!(J_vec, m)
+            push!(I_vec, m)
+            push!(J_vec, n)
             push!(V_vec, v * norm_factor)
         end
     end
 
-    H = sparse(I_vec, J_vec, V_vec)
+    # the size has to be given explicitly: basis states without any matrix element would
+    # otherwise shrink the matrix below the dimension of the basis
+    dim = length(ba.states)
+    H = sparse(I_vec, J_vec, V_vec, dim, dim)
     check_hermitian && !ishermitian(H) && throw(ArgumentError("Hamiltonian is not Hermitean: Antihermitean part has norm $(norm(H-H')/2)"))
 
     H

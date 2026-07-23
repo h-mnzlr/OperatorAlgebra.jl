@@ -377,40 +377,61 @@ _simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = beg
     end
     best_score, (best, _) = first(table)
 
-    for step in 1:nsteps
-        # expand the best state that has not been expanded yet
-        st = nothing
-        tok = firstindex(table)
-        while tok != pastendsemitoken(table)
-            _, (o, checked) = deref((table, tok))
-            if !checked[]
-                checked[] = true
-                st = o
-                break
-            end
-            tok = advance((table, tok))
+    # Any-good search: rather than exhausting every candidate rewrite of a state to
+    # find the best one among them, take the first rewrite found to improve on
+    # `best_score`, drop it into the table, and restart from there right away (i.e.
+    # the next state picked for expansion is, by construction, the just-found one
+    # unless something even better is already sitting in the table). Only when a
+    # state's candidates run out without an improvement does the search fall
+    # through to pick the next-best unexpanded state instead.
+    step = 0
+    @label restart
+    step += 1
+    step > nsteps && @goto converged
+
+    # expand the best state that has not been expanded yet
+    st = nothing
+    st_checked = nothing
+    tok = firstindex(table)
+    while tok != pastendsemitoken(table)
+        _, (o, checked) = deref((table, tok))
+        if !checked[]
+            st = o
+            st_checked = checked
+            break
         end
-        isnothing(st) && break  # converged
-        verbosity >= 1 && println(stderr, "Simplification step $step, table size: $(length(table)), best score: $best_score\r")
+        tok = advance((table, tok))
+    end
+    isnothing(st) && @goto converged
+    verbosity >= 1 && println(stderr, "Simplification step $step, table size: $(length(table)), best score: $best_score\r")
 
-        for rule in ALL_SEARCH_RULES, raw in rule(st)
-            cand = _normalize(raw, NORMALIZING_RULES; known)
+    # `st_checked` is only flipped to `true` once the loop below runs to completion,
+    # i.e. every candidate rewrite of `st` was generated without finding an
+    # improvement. Breaking out early (the `@goto restart` below) leaves it `false`,
+    # so `st` remains eligible to be picked again later and get the rest of its
+    # candidates explored -- it must never be marked fully exhausted just because we
+    # stopped looking at it early.
+    for rule in ALL_SEARCH_RULES, raw in rule(st)
+        cand = _normalize(raw, NORMALIZING_RULES; known)
 
-            key = _state_key(cand, key_cache)
-            key in seen && continue
-            push!(seen, key)
+        key = _state_key(cand, key_cache)
+        key in seen && continue
+        push!(seen, key)
 
-            cand_score = _state_score(cand, score_cache)
-            if cand_score < best_score
-                best = cand
-                best_score = cand_score
-            end
+        cand_score = _state_score(cand, score_cache)
+        push!(table, cand_score => (cand, Ref(false)))
+        length(table) > tablesize && delete!((table, lastindex(table)))
 
-            push!(table, cand_score => (cand, Ref(false)))
-            length(table) > tablesize && delete!((table, lastindex(table)))
+        if cand_score < best_score
+            best = cand
+            best_score = cand_score
+            @goto restart
         end
     end
+    st_checked[] = true
+    @goto restart
 
+    @label converged
     best
 end
 
