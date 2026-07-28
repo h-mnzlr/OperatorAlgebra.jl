@@ -46,6 +46,9 @@ using OperatorAlgebra
     
     @info "Testing sites() function..."
     include("test_sites.jl")
-    
+
+    @info "Testing decompose()..."
+    include("test_decompose.jl")
+
     @info "All tests completed!"
 end

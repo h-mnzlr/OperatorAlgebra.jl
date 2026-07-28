@@ -86,7 +86,11 @@ function atsite(T, op::Op, bi::AbstractVector{<:Pair})
 end
 
 atsite(op::AbstractOp, bi::AbstractVector{<:Pair}) = atsite(identity, op, bi)
-atsite(T, os::OpSum, bi::AbstractVector{<:Pair}) =
+atsite(T, os::OpSum, bi::AbstractVector{<:Pair}) = begin
+    isempty(os.ops) && return T(zeros(eltype(os), prod(last, bi), prod(last, bi)))
     sum(atsite(T, op, bi) for op in os.ops)
-atsite(T, oc::OpChain, bi::AbstractVector{<:Pair}) =
+end
+atsite(T, oc::OpChain, bi::AbstractVector{<:Pair}) = begin
+    isempty(oc.ops) && return T(I(prod(last, bi)))
     prod(atsite(T, op, bi) for op in oc.ops)
+end
