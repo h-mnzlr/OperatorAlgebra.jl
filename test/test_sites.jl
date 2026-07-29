@@ -702,3 +702,72 @@ end
         end
     end
 end
+
+@testset "site helpers and cross-type site comparison" begin
+    @testset "site_dims returns the local dimensions" begin
+        op = Op(PAULI_X, 1) + Op(rand(3, 3), 2)
+        @test OperatorAlgebra.site_dims(op) == [2, 3]
+        @test OperatorAlgebra.site_dims(Op(PAULI_X, 1)) == [2]
+        # it is the second half of basis_info, as sites() is the first
+        @test collect(zip(sites(op), OperatorAlgebra.site_dims(op))) ==
+              [(s, d) for (s, d) in basis_info(op)]
+    end
+
+    @testset "different AbstractSite types are never the same site" begin
+        # Two tags wrapping the *same* raw identifier still denote different sites, since
+        # they carry different statistics.
+        f, p = fermion(1), phased(1, im)
+        @test rawsite(f) == rawsite(p)
+        @test !isequal(f, p)
+        @test !isequal(p, f)
+        @test !(f == p)
+        @test !(p == f)
+
+        # ...while same-type tags compare through their raw identifier
+        @test isequal(fermion(1), fermion(1))
+        @test fermion(1) == fermion(1)
+        @test !isequal(fermion(1), fermion(2))
+        @test hash(fermion(1)) == hash(fermion(1))
+        @test hash(fermion(1)) != hash(phased(1, im))  # the tag is part of the hash
+    end
+
+    @testset "fermion() on an already-tagged site re-tags rather than nesting" begin
+        @test fermion(fermion(2)) == fermion(2)
+        @test rawsite(fermion(fermion(2))) == 2
+        @test !(rawsite(fermion(fermion(2))) isa AbstractSite)
+        # re-tagging a differently-tagged site adopts the fermionic tag
+        @test fermion(phased(2, im)) == fermion(2)
+    end
+
+    @testset "exchange_phase defaults per style" begin
+        @test exchange_phase(1) == 1            # Commuting
+        @test exchange_phase(:a) == 1
+        @test exchange_phase(fermion(1)) == -1  # Fermionic
+        # a custom site may override it entirely
+        @test exchange_phase(phased(1, im)) != -1
+    end
+
+    @testset "basis consistency check can report instead of throwing" begin
+        good = [1 => 2, 2 => 3, 1 => 2]
+        bad = [1 => 2, 1 => 3]
+
+        @test OperatorAlgebra._check_consistent_basis_info(good)
+        @test OperatorAlgebra._check_consistent_basis_info(good; should_throw=false)
+
+        @test_throws DimensionMismatch OperatorAlgebra._check_consistent_basis_info(bad)
+        # ...and the non-throwing form returns false for the same input
+        @test !OperatorAlgebra._check_consistent_basis_info(bad; should_throw=false)
+    end
+end
+
+@testset "FermionSite display" begin
+    # The tag prints as the constructor call that produces it, so a shown operator reads
+    # back as the expression you would write.
+    @test sprint(show, fermion(3)) == "fermion(3)"
+    @test sprint(show, fermion(:a)) == "fermion(a)"
+    @test sprint(show, fermion((1, 2))) == "fermion((1, 2))"
+    @test repr(fermion(3)) == "fermion(3)"
+
+    # and it shows through an operator that carries it
+    @test occursin("site=fermion(1)", sprint(show, fermion(Op(PAULI_X, 1))))
+end

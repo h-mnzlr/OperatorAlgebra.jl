@@ -224,12 +224,60 @@ end
 end
 
 @testset "OpChain Display Tests" begin
+    # Two conventions are in play and are tested separately:
+    #   show(io, x)                     -- compact, single-line, used by `repr`
+    #   show(io, MIME"text/plain"(), x) -- the multi-line form the REPL uses
+    # Assertions check structure rather than byte-exact output, so reformatting a matrix
+    # does not break them while a genuinely broken layout still does.
+    compact(x) = sprint(show, x)
+    plain(x) = sprint(show, MIME"text/plain"(), x)
+
     opchain = OpChain(Op([1 0; 0 1], 1), Op([0 1; 1 0], 2))
-    str = sprint(show, opchain)
+    str = compact(opchain)
 
     @test occursin("OpChain(ops=[", str)
     @test occursin("])", str)
     @test occursin(", ", str)  # separator between operators
+
+    @testset "compact form is single-line, one entry per factor" begin
+        oc = Op(PAULI_X, 1) * Op(PAULI_Z, 2)
+        s = compact(oc)
+        @test startswith(s, "OpChain(ops=[")
+        @test endswith(s, "])")
+        @test !occursin("\n", s)
+        @test count("Op(site=", s) == 2
+        @test occursin("), Op(", s)
+        @test repr(oc) == s
+    end
+
+    @testset "text/plain form is multi-line and indented" begin
+        s = plain(Op(PAULI_X, 1) * Op(PAULI_Z, 2))
+        @test startswith(s, "OpChain(ops=[")
+        @test endswith(s, "])")
+        @test occursin("\n", s)
+        @test count("Op(site=", s) == 2
+        @test occursin("    Op(site=", s)      # factors are indented
+    end
+
+    @testset "single factor has no separator" begin
+        s = plain(OpChain(Op(PAULI_X, 1)))
+        @test count("Op(site=", s) == 1
+        @test !occursin("), \n", s)
+    end
+
+    @testset "empty chain still renders" begin
+        @test compact(OpChain(AbstractOp[])) == "OpChain(ops=[])"
+        @test occursin("OpChain(ops=[", plain(OpChain(AbstractOp[])))
+    end
+
+    @testset "a nested sum is shown, not flattened away" begin
+        nested = Op(PAULI_X, 1) * (Op(PAULI_Z, 2) + Op(PAULI_Y, 3))
+        for s in (compact(nested), plain(nested))
+            @test occursin("OpChain(ops=[", s)
+            @test occursin("OpSum(ops=[", s)
+            @test count("Op(site=", s) == 3
+        end
+    end
 end
 
 @testset "OpChain Edge Cases" begin
@@ -298,4 +346,16 @@ end
         @test opchain_adj.ops[1].site == :b
         @test opchain_adj.ops[2].site == :a
     end
+end
+
+@testset "OpChain empty-vector constructor" begin
+    # The empty case cannot infer Tid/Tmat by promotion, so it falls back to Bool,Bool.
+    oc = OpChain(AbstractOp[])
+    @test oc isa OpChain{Bool,Bool}
+    @test isempty(oc.ops)
+    @test eltype(oc) == Bool
+    @test sitetype(oc) == Bool
+
+    # a chain of no factors is the identity, and embeds as such
+    @test Array(oc, [1 => 2, 2 => 2]) == Matrix(I, 4, 4)
 end

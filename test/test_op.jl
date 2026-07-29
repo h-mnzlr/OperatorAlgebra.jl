@@ -38,12 +38,29 @@ using LinearAlgebra, SparseArrays
 end
 
 @testset "Op Display Tests" begin
+    # Assertions check structure (delimiters, the site, the presence of a matrix) rather
+    # than byte-exact output, so reformatting a matrix does not break them while a
+    # genuinely broken layout still does.
+    compact(x) = sprint(show, x)
+
     @testset "show method" begin
         mat = [1 2; 3 4]
         op = Op(mat, 1)
-        str = sprint(show, op)
+        str = compact(op)
         @test occursin("Op(site=1", str)
         @test occursin("mat=", str)
+    end
+
+    @testset "the site is shown as written, whatever its type" begin
+        @test occursin("site=a", compact(Op(PAULI_X, :a)))
+        @test occursin("site=(1, 2)", compact(Op(PAULI_X, (1, 2))))
+        @test occursin("site=fermion(1)", compact(fermion(Op(PAULI_X, 1))))
+    end
+
+    @testset "single-line, and repr round-trips through show" begin
+        op = Op(PAULI_X, 1)
+        @test !occursin("\n", compact(op))
+        @test repr(op) == compact(op)
     end
 end
 

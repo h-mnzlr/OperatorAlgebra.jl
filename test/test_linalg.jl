@@ -413,3 +413,78 @@ end
         @test tr(chain, [1 => 2, 2 => 2]) == tr(op1.mat) * tr(op2.mat)
     end
 end
+
+@testset "diag()" begin
+    # diag(op) keeps the operator structure and replaces every factor's matrix by its
+    # diagonal part, so it commutes with building the full matrix only for a single site.
+    @testset "single Op" begin
+        d = diag(Op([1 2; 3 4], 1))
+        @test d isa Op
+        @test d.site == 1
+        @test d.mat == [1 0; 0 4]
+    end
+
+    @testset "OpChain diagonalises each factor" begin
+        oc = Op([1 2; 3 4], 1) * Op([5 6; 7 8], 2)
+        d = diag(oc)
+        @test d isa OpChain
+        @test [o.mat for o in d.ops] == [[1 0; 0 4], [5 0; 0 8]]
+        @test [o.site for o in d.ops] == [1, 2]
+    end
+
+    @testset "OpSum diagonalises each term" begin
+        os = Op([1 2; 3 4], 1) + Op([5 6; 7 8], 2)
+        d = diag(os)
+        @test d isa OpSum
+        @test [o.mat for o in d.ops] == [[1 0; 0 4], [5 0; 0 8]]
+    end
+
+    @testset "matches the diagonal of the full matrix on one site" begin
+        bi = [1 => 2]
+        A = [1 2; 3 4]
+        @test Array(diag(Op(A, 1)), bi) == diagm(diag(A))
+    end
+
+    @testset "already-diagonal operators are unchanged" begin
+        for mat in (PAULI_Z, OCC_PART, [1 0; 0 0])
+            @test diag(Op(mat, 1)).mat == mat
+        end
+        # ...and purely off-diagonal ones vanish
+        @test iszero(diag(Op(PAULI_X, 1)).mat)
+    end
+end
+
+@testset "norm()" begin
+    # Frobenius norm, defined as sqrt(real(tr(op * op'))) over the operator's own basis.
+    @testset "single-site operators" begin
+        @test norm(Op(PAULI_X, 1)) ≈ sqrt(2)
+        @test norm(Op(PAULI_Y, 1)) ≈ sqrt(2)
+        @test norm(Op(PAULI_Z, 1)) ≈ sqrt(2)
+        @test norm(Op(OCC_PART, 1)) ≈ 1
+        @test norm(Op(zeros(2, 2), 1)) ≈ 0
+    end
+
+    @testset "agrees with the Frobenius norm of the full matrix" begin
+        for (op, bi) in (
+            (Op(PAULI_X, 1), [1 => 2]),
+            (Op(PAULI_X, 1) + Op(PAULI_Z, 2), [1 => 2, 2 => 2]),
+            (Op(PAULI_X, 1) * Op(PAULI_Z, 2), [1 => 2, 2 => 2]),
+            (Op([1 2; 3 4], 1) + Op([0 1; 1 1], 2), [1 => 2, 2 => 2]),
+        )
+            M = Matrix(sparse(op, bi))
+            @test norm(op, bi) ≈ sqrt(sum(abs2, M))
+        end
+    end
+
+    @testset "explicit basis padding scales the norm" begin
+        op = Op(PAULI_X, 1)
+        # embedding into one extra 2-dimensional site multiplies tr(op op') by 2
+        @test norm(op, [1 => 2, 2 => 2]) ≈ sqrt(2) * norm(op, [1 => 2])
+    end
+
+    @testset "norm is real and non-negative for complex operators" begin
+        n = norm(Op([0 -im; im 0], 1) + Op([1 im; -im 1], 2), [1 => 2, 2 => 2])
+        @test n isa Real
+        @test n > 0
+    end
+end

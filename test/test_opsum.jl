@@ -184,11 +184,43 @@ end
 end
 
 @testset "OpSum Display Tests" begin
+    # Two conventions are in play and are tested separately:
+    #   show(io, x)                     -- compact, single-line, used by `repr`
+    #   show(io, MIME"text/plain"(), x) -- the multi-line form the REPL uses
+    # Assertions check structure rather than byte-exact output, so reformatting a matrix
+    # does not break them while a genuinely broken layout still does.
+    compact(x) = sprint(show, x)
+    plain(x) = sprint(show, MIME"text/plain"(), x)
+
     opsum = OpSum(Op([1 0; 0 1], 1), Op([0 1; 1 0], 2))
-    str = sprint(show, opsum)
+    str = compact(opsum)
 
     @test occursin("OpSum(ops=[", str)
     @test occursin("])", str)
+
+    @testset "compact form is single-line, one entry per term" begin
+        os = Op(PAULI_X, 1) + Op(PAULI_Z, 2)
+        s = compact(os)
+        @test startswith(s, "OpSum(ops=[")
+        @test endswith(s, "])")
+        @test !occursin("\n", s)
+        @test count("Op(site=", s) == 2
+        @test repr(os) == s
+    end
+
+    @testset "text/plain form is multi-line and indented" begin
+        s = plain(Op(PAULI_X, 1) + Op(PAULI_Z, 2))
+        @test startswith(s, "OpSum(ops=[")
+        @test endswith(s, "])")
+        @test occursin("\n", s)
+        @test count("Op(site=", s) == 2
+        @test occursin("    Op(site=", s)      # terms are indented
+    end
+
+    @testset "empty sum still renders" begin
+        @test compact(OpSum(AbstractOp[])) == "OpSum(ops=[])"
+        @test occursin("OpSum(ops=[", plain(OpSum(AbstractOp[])))
+    end
 end
 
 @testset "OpSum Adjoint Tests" begin
@@ -222,4 +254,17 @@ end
         @test length(opsum_adj.ops) == 5
         @test all(i -> opsum_adj.ops[i].mat ≈ adjoint(ops[i].mat), 1:5)
     end
+end
+
+@testset "OpSum empty-vector constructor" begin
+    # As for OpChain, the empty case has nothing to promote and falls back to Bool,Bool.
+    os = OpSum(AbstractOp[])
+    @test os isa OpSum{Bool,Bool}
+    @test isempty(os.ops)
+    @test eltype(os) == Bool
+    @test sitetype(os) == Bool
+    @test iszero(os)
+
+    # an empty sum is the zero operator
+    @test Array(os, [1 => 2, 2 => 2]) == zeros(4, 4)
 end

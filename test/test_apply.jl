@@ -464,3 +464,82 @@ end
         @test_throws ArgumentError apply(Op(PAULI_X, 1), rand(4), bi)
     end
 end
+
+@testset "apply on a Dict of basis amplitudes" begin
+    bi = [1 => 2, 2 => 2]
+
+    @testset "matches the matrix action on the corresponding sparse vector" begin
+        for (op, st) in (
+            (Op(PAULI_X, 2), Dict(1 => 1.0)),
+            (Op(PAULI_X, 1) * Op(PAULI_Z, 2), Dict(2 => 1.0)),
+            (Op(PAULI_X, 1) + Op(PAULI_Z, 2), Dict(1 => 0.5, 4 => -1.5)),
+            (Op(PAULI_Z, 1), Dict(1 => 1.0 + 0im, 3 => 2.0 - 1im)),
+        )
+            out = apply(op, st, bi)
+
+            v = zeros(ComplexF64, 4)
+            for (i, a) in st
+                v[i] = a
+            end
+            ref = Matrix(sparse(op, bi)) * v
+
+            got = zeros(ComplexF64, 4)
+            for (i, a) in out
+                got[i] = a
+            end
+            @test got ≈ ref
+        end
+    end
+
+    @testset "the element type is promoted, not truncated" begin
+        out = apply(Op(PAULI_Y, 1), Dict(1 => 1.0), bi)   # Y is complex, input is real
+        @test valtype(out) <: Complex
+    end
+
+    @testset "out-of-range basis indices throw" begin
+        @test_throws ArgumentError apply(Op(PAULI_X, 1), Dict(0 => 1.0), bi)
+        @test_throws ArgumentError apply(Op(PAULI_X, 1), Dict(5 => 1.0), bi)
+    end
+end
+
+@testset "compiled kernels display their shape" begin
+    bi = [1 => 2, 2 => 2]
+    H = Op(PAULI_X, 1) + Op(PAULI_Z, 2)
+
+    compact(x) = sprint(show, x)
+    plain(x) = sprint(show, MIME"text/plain"(), x)
+
+    @testset "compile_apply" begin
+        c = compile_apply(H, bi)
+        s = compact(c)
+        @test startswith(s, "apply(")
+        @test occursin("2 terms", s)          # one per term of the OpSum
+        @test occursin("dim 4", s)            # 2 * 2
+        @test occursin("thread", s)
+        @test endswith(s, ")")
+        @test plain(c) == s                   # text/plain delegates to the compact form
+    end
+
+    @testset "compile_apply! is labelled distinctly" begin
+        c = compile_apply!(H, bi)
+        s = compact(c)
+        @test startswith(s, "apply!(")        # the bang distinguishes it
+        @test occursin("2 terms", s)
+        @test occursin("dim 4", s)
+        @test plain(c) == s
+    end
+
+    @testset "thread count is singular for one thread" begin
+        s = compact(compile_apply(H, bi; threads=1))
+        @test occursin("1 thread)", s)
+        @test !occursin("threads", s)
+    end
+
+    @testset "term count and dimension track the operator" begin
+        bi3 = [1 => 2, 2 => 2, 3 => 3]
+        H3 = Op(PAULI_X, 1) + Op(PAULI_Z, 2) + Op(PAULI_X, 1) * Op(PAULI_Z, 2)
+        s = compact(compile_apply(H3, bi3))
+        @test occursin("3 terms", s)
+        @test occursin("dim 12", s)           # 2 * 2 * 3
+    end
+end
