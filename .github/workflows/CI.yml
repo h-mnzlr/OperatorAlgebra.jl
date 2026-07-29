@@ -30,7 +30,6 @@ jobs:
               - 'Project.toml'
               - 'test/*.jl'
               - 'test/Project.toml'
-              - '.github/workflows/CI.yml'
 
       # An extension job runs only when that extension's own code, its own tests, or the
       # package version/metadata changes -- not when unrelated core internals do.
@@ -51,7 +50,6 @@ jobs:
           # Paths that make every extension job run, on top of each extension's own files.
           SHARED_PATHS: >-
             Project.toml
-            .github/workflows/CI.yml
         run: |
           {
             echo 'filters<<GENERATED_FILTERS'
@@ -96,8 +94,14 @@ jobs:
             echo 'matrix=["1.9","1.10","1.11","1","nightly"]' >> "$GITHUB_OUTPUT"
           fi
 
+  # `name:` is deliberately unset here and on test-ext. `jobs.<id>.if` is evaluated *before*
+  # the matrix is expanded, so a skipped job has no matrix context and GitHub prints any
+  # `name:` expression verbatim rather than evaluating it -- actions/runner#1215, open since
+  # 2021, with no workaround that keeps a custom name. Leaving it unset lets GitHub derive the
+  # name from the job id and the matrix values instead: "test (1.9, ubuntu-latest, x64)" while
+  # running, plain "test" when skipped. Adding a `name:` back reintroduces the raw-expression
+  # display on every skipped run.
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     needs: changes
     if: needs.changes.outputs.core == 'true'
     runs-on: ${{ matrix.os }}
@@ -125,7 +129,6 @@ jobs:
           flags: core
 
   test-ext:
-    name: ${{ matrix.ext }} ext - Julia ${{ matrix.version }} - ${{ matrix.os }}
     needs: changes
     if: needs.changes.outputs.exts != '[]'
     runs-on: ${{ matrix.os }}
