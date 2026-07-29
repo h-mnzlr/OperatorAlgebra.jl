@@ -29,8 +29,6 @@ using OperatorAlgebra
     @info "Testing linear algebra operations (trace, etc.)..."
     include("test_linalg.jl")
 
-    @info "Testing LinearMap conversions..."
-    include("test_linearmap.jl")
 
     @info "Testing Array/Matrix conversions..."
     include("test_array.jl")

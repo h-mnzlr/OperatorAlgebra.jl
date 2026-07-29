@@ -1,4 +1,24 @@
-# integration with latexify
+"""
+# OperatorAlgebraLatexifyExt
+
+Extension module integrating OperatorAlgebra operators with
+[Latexify.jl](https://github.com/korsbo/Latexify.jl).
+
+This extension loads automatically once both OperatorAlgebra and Latexify are imported, and
+also enables `text/latex` display of operators (e.g. in Jupyter/Pluto).
+
+```julia
+using OperatorAlgebra
+using Latexify  # Extension loads automatically
+
+latexify(Op(PAULI_X, 1) + Op(PAULI_Z, 2))
+```
+"""
+module OperatorAlgebraLatexifyExt
+
+using OperatorAlgebra
+using OperatorAlgebra: AbstractOp, Op, OpChain, OpSum
+
 using Latexify
 
 # Conversion function to create LaTeXStrings from an operator in the latexify interface
@@ -24,3 +44,4 @@ function Base.show(io::IO, ::MIME"text/latex", op::AbstractOp)
     print(io, latexify(op))
 end
 Base.showable(::MIME"text/latex", ::AbstractOp) = true
+end # module

@@ -1,4 +1,27 @@
 """
+# OperatorAlgebraLinearMapsExt
+
+Extension module providing matrix-free `LinearMaps.LinearMap` representations of
+OperatorAlgebra operators.
+
+This extension loads automatically once both OperatorAlgebra and LinearMaps are imported.
+
+```julia
+using OperatorAlgebra
+using LinearMaps  # Extension loads automatically
+
+lm = LinearMap(Op(PAULI_X, 1) * Op(PAULI_Z, 2), [1, 2])
+```
+"""
+module OperatorAlgebraLinearMapsExt
+
+using OperatorAlgebra
+using OperatorAlgebra: AbstractOp, Op, OpChain, OpSum, sites
+
+using LinearAlgebra
+using LinearMaps
+
+"""
     LinearMap(op::AbstractOp, basis; dims=nothing)
 
 Create a matrix-free LinearMap representation of an operator.
@@ -70,3 +93,4 @@ LinearMaps.LinearMap(oc::OpChain{Tid}, basis::AbstractVector{Tid}) where {Tid} =
     prod(LinearMap(op, basis) for op in oc.ops)
 
 LinearMaps.LinearMap(op::AbstractOp) = LinearMap(op, sites(op))
+end # module

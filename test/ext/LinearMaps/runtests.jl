@@ -1,7 +1,25 @@
+# Opt-in test group for ext/OperatorAlgebraLinearMapsExt.jl.
+#
+# Not part of the default `Pkg.test()` run. Run explicitly with:
+#
+#     julia --project=test/ext/LinearMaps test/ext/LinearMaps/runtests.jl
+#
+# The extension adds matrix-free `LinearMaps.LinearMap` constructors for operators. Ground
+# truth throughout is the package's ordinary `sparse(op, bi)` path: a LinearMap must act on
+# vectors exactly as the assembled sparse matrix does.
+
 using Test
 using LinearAlgebra
-using LinearMaps: LinearMap
 using SparseArrays
+using OperatorAlgebra
+
+@testset "extension loads on demand" begin
+    @test Base.get_extension(OperatorAlgebra, :OperatorAlgebraLinearMapsExt) === nothing
+    @eval using LinearMaps
+    @test Base.get_extension(OperatorAlgebra, :OperatorAlgebraLinearMapsExt) isa Module
+end
+
+using LinearMaps: LinearMap
 
 @testset "LinearMap Tests for Op" begin
     @testset "Matches the sparse construction on random vectors" begin

@@ -5,21 +5,21 @@ version = "0.3.2"
 
 [deps]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [weakdeps]
 ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
+Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 SymBasis = "0806812d-f945-4f84-939d-820504b53c51"
 
 [extensions]
 OperatorAlgebraITensorMPSExt = "ITensorMPS"
+OperatorAlgebraLatexifyExt = "Latexify"
+OperatorAlgebraLinearMapsExt = "LinearMaps"
 OperatorAlgebraSymBasisExt = "SymBasis"
 
 [compat]
-DataStructures = "0.19.5"
-Latexify = "0.16.10"
-LinearMaps = "3"
+DataStructures = "0.19"
 julia = "1.9"

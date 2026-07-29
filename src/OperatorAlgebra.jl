@@ -69,7 +69,6 @@ See also: [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref), [`apply`](@ref), [`a
 module OperatorAlgebra
 
 using LinearAlgebra, SparseArrays
-using LinearMaps
 
 export AbstractOp, Op, OpChain, OpSum
 export basis_info, sites, simplify, normal_order, flattenop, commutator, decompose
@@ -92,9 +91,7 @@ include("array.jl")
 include("sparse.jl")
 include("apply.jl")
 include("apply_compiled.jl")
-include("linearmap.jl")
 include("simplify.jl")
 include("decompose.jl")
-include("latexify.jl")
 
 end # module OperatorAlgebra

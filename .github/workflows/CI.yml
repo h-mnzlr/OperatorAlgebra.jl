@@ -45,6 +45,8 @@ jobs:
       fail-fast: false
       matrix:
         ext:
+          - Latexify
+          - LinearMaps
           - SymBasis
           - ITensorMPS
         version:
