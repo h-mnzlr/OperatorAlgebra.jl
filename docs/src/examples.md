@@ -32,8 +32,10 @@ julia> H = tfim_hamiltonian(N, J=1.0, h=0.5);
 
 julia> H_matrix = Array(H, (1:N) .=> 2);  # N sites, each of local dimension 2
 
-julia> ground_energy = minimum(eigvals(Symmetric(H_matrix)))
--7.640592553590065
+julia> ground_energy = minimum(eigvals(Symmetric(H_matrix)));
+
+julia> round(ground_energy, digits = 8)  # rounded: eigvals' last ulps are BLAS-dependent
+-7.64059255
 
 ```
 
