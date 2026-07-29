@@ -2,6 +2,8 @@ using Test
 using LinearAlgebra
 using OperatorAlgebra: atsite, rawsite, FermionSite  # not exported
 
+@info "Testing normal_order()..."
+
 # The defining property of normal_order: it may only change how an operator is written,
 # never the operator itself.
 embeds_equally(op, bi) = atsite(Matrix, normal_order(op, bi), bi) ≈ atsite(Matrix, op, bi)

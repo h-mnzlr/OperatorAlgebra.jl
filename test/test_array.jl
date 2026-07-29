@@ -1,6 +1,8 @@
 using Test
 using OperatorAlgebra: atsite  # not exported
 
+@info "Testing Array/Matrix conversions..."
+
 @testset "Array/Matrix Conversion Tests" begin
     @testset "Array(op, bi) delegates to atsite(Array, ...)" begin
         op = Op(PAULI_X, 2)

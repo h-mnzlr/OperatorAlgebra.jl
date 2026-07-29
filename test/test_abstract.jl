@@ -1,6 +1,8 @@
 using Test
 using OperatorAlgebra: sitetype, eltype, commutator
 
+@info "Testing AbstractOp edge cases..."
+
 @testset "AbstractOp Edge Cases" begin
     struct MockOp <: AbstractOp{Int64,Float64}
         value::Float64

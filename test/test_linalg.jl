@@ -1,6 +1,8 @@
 using Test
 using LinearAlgebra
 
+@info "Testing linear algebra operations (trace, etc.)..."
+
 @testset "Trace Tests for Op" begin
     @testset "Trace of Op on single site" begin
         # Identity matrix should have trace = 2 (for 2x2)

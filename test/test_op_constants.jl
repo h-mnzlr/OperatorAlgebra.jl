@@ -2,6 +2,8 @@ using Test
 using LinearAlgebra
 using SparseArrays
 
+@info "Testing operator constants (Pauli, ladder operators)..."
+
 @testset "Pauli Matrix Constants Tests" begin
     @testset "Pauli X properties" begin
         @test size(PAULI_X) == (2, 2)

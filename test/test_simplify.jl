@@ -2,6 +2,8 @@ using Test
 using SparseArrays
 using OperatorAlgebra: atsite  # not exported
 
+@info "Testing simplify()..."
+
 @testset "simplify() Tests" begin
     @testset "Op simplified is Op" begin
         op = Op([1 0; 0 2], 1)

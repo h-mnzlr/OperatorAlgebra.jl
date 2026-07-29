@@ -2,6 +2,8 @@ using Test
 using OperatorAlgebra
 using LinearAlgebra
 
+@info "Testing sites() function..."
+
 # not exported: the site interface is implementor-facing, atsite is opt-in
 using OperatorAlgebra: atsite, rawsite, withrawsite,
                        AbstractSite, FermionSite, sitetype,

@@ -1,6 +1,8 @@
 using Test
 using LinearAlgebra
 
+@info "Testing OpSum operations..."
+
 @testset "OpSum Constructor Tests" begin
     @testset "Vararg constructor collects operators" begin
         op1 = Op([1 0; 0 1], 1)

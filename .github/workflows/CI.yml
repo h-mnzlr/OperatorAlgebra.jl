@@ -6,19 +6,105 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  changes:
+    name: Detect changed components
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.core.outputs.run }}
+      exts: ${{ steps.extlist.outputs.list }}
+      versions: ${{ steps.versions.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: core
+        with:
+          filters: |
+            run:
+              - 'src/**'
+              - 'Project.toml'
+              - 'test/*.jl'
+              - 'test/Project.toml'
+              - '.github/workflows/CI.yml'
+
+      # An extension job runs only when that extension's own code, its own tests, or the
+      # package version/metadata changes -- not when unrelated core internals do.
+      #
+      # The filter config is built from the contents of ext/ rather than written out by hand,
+      # so adding an extension needs no change here: drop in `ext/OperatorAlgebra<Name>Ext.jl`
+      # and a `test/ext/<Name>/` environment and its job appears. codecov.yml needs nothing
+      # either -- its `default_rules` carryforward covers flags it has never seen.
+      #
+      # No core source file appears in the filters at all. Every extension test builds its own
+      # reference matrices and its own operator constants, no extension source reaches past the
+      # operator type API, and that API is treated as stable and amend-only -- so a change
+      # there that could break an extension bumps the version in Project.toml, which is in the
+      # shared set. If an extension ever does need a core path, add it to its block below.
+      - id: mkfilters
+        shell: bash
+        env:
+          # Paths that make every extension job run, on top of each extension's own files.
+          SHARED_PATHS: >-
+            Project.toml
+            .github/workflows/CI.yml
+        run: |
+          {
+            echo 'filters<<GENERATED_FILTERS'
+
+            echo 'shared: &shared'
+            for path in $SHARED_PATHS; do
+              echo "  - '$path'"
+            done
+
+            # one entry per ext/OperatorAlgebra<Name>Ext.jl
+            for src in ext/OperatorAlgebra*Ext.jl; do
+              name=${src#ext/OperatorAlgebra}
+              name=${name%Ext.jl}
+              echo "$name:"
+              echo "  - *shared"
+              echo "  - '$src'"
+              echo "  - 'test/ext/$name/**'"
+            done
+
+            echo 'GENERATED_FILTERS'
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - uses: dorny/paths-filter@v3
+        id: ext
+        with:
+          filters: ${{ steps.mkfilters.outputs.filters }}
+
+      # `shared` exists only to be referenced by the anchors above; drop it so it cannot show
+      # up in the matrix as a phantom extension.
+      - id: extlist
+        run: |
+          echo "list=$(jq -c 'map(select(. != "shared"))' \
+            <<< '${{ steps.ext.outputs.changes }}')" >> "$GITHUB_OUTPUT"
+
+      # Pull requests test the compat floor (1.9, from Project.toml) and current stable;
+      # pushes to main run the full matrix.
+      - id: versions
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo 'matrix=["1.9","1"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix=["1.9","1.10","1.11","1","nightly"]' >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - '1.9'
-          - '1.10'
-          - '1.11'
-          - '1'
-          - 'nightly'
+        version: ${{ fromJSON(needs.changes.outputs.versions) }}
         os:
           - ubuntu-latest
         arch:
@@ -40,15 +126,13 @@ jobs:
 
   test-ext:
     name: ${{ matrix.ext }} ext - Julia ${{ matrix.version }} - ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.exts != '[]'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        ext:
-          - Latexify
-          - LinearMaps
-          - SymBasis
-          - ITensorMPS
+        ext: ${{ fromJSON(needs.changes.outputs.exts) }}
         version:
           - '1'
         os:
@@ -71,3 +155,14 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ext-${{ matrix.ext }}
+
+  # Single stable check to require in branch protection: skipped jobs are expected, but a
+  # failure must not pass as green just because the job that failed was conditional.
+  ci-ok:
+    name: CI ok
+    if: always()
+    needs: [changes, test, test-ext]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

@@ -15,6 +15,12 @@ using Test
 using LinearAlgebra
 using OperatorAlgebra
 
+# Local copies of the operator matrices used here, so these tests do not depend on the
+# package's exported constants (src/op_constants.jl). Values match that file exactly.
+const PX = [0 1; 1 0]
+const PY = [0 -im; im 0]
+const PZ = [1 0; 0 -1]
+
 @testset "extension loads on demand" begin
     @test Base.get_extension(OperatorAlgebra, :OperatorAlgebraLatexifyExt) === nothing
     @eval using Latexify
@@ -24,12 +30,12 @@ end
 using Latexify
 
 @testset "OperatorAlgebraLatexifyExt" begin
-    x1 = Op(PAULI_X, 1)
-    z2 = Op(PAULI_Z, 2)
-    y3 = Op(PAULI_Y, 3)
+    x1 = Op(PX, 1)
+    z2 = Op(PZ, 2)
+    y3 = Op(PY, 3)
 
     @testset "single Op carries its matrix and a site subscript" begin
-        for (mat, site) in ((PAULI_X, 1), (PAULI_Z, 7), (PAULI_Y, 2), ([1 2; 3 4], 5))
+        for (mat, site) in ((PX, 1), (PZ, 7), (PY, 2), ([1 2; 3 4], 5))
             s = latexraw(Op(mat, site))
             @test occursin(latexraw(mat), s)      # the matrix, however Latexify renders it
             @test endswith(s, "_{$(site)}")       # ...subscripted by the site
@@ -37,11 +43,11 @@ using Latexify
     end
 
     @testset "non-integer site identifiers" begin
-        @test endswith(latexraw(Op(PAULI_X, :a)), "_{a}")
+        @test endswith(latexraw(Op(PX, :a)), "_{a}")
     end
 
     @testset "OpChain concatenates its factors" begin
-        for chain in (x1 * z2, x1 * z2 * y3, Op(PAULI_X, 1) * Op(PAULI_Z, 1))
+        for chain in (x1 * z2, x1 * z2 * y3, Op(PX, 1) * Op(PZ, 1))
             # compare against the factors as stored, since building the chain promotes
             # their element type and that changes how Latexify prints the entries
             @test latexraw(chain) == prod(latexraw(o) for o in chain.ops)

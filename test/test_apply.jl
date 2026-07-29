@@ -4,6 +4,8 @@ using SparseArrays
 using OperatorAlgebra
 using OperatorAlgebra: atsite  # not exported
 
+@info "Testing apply operations..."
+
 # Collect an index => amplitude Dict (as returned by the integer interface) into a dense
 # column vector over the full Hilbert space.
 densify(d, N) = begin

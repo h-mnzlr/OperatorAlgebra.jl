@@ -3,6 +3,8 @@ using LinearAlgebra
 using SparseArrays
 using OperatorAlgebra
 
+@info "Testing decompose()..."
+
 # `decompose(A::AbstractMatrix, bi; tol=1e-10)` is the (approximate) inverse of
 # `Array(op, bi)`/`atsite`: given a matrix on the full tensor-product Hilbert space
 # described by `bi`, it returns an `AbstractOp` -- a sum of tensor products of local

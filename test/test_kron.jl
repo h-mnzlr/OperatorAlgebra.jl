@@ -3,6 +3,8 @@ using LinearAlgebra
 using SparseArrays
 using OperatorAlgebra: atsite  # not exported
 
+@info "Testing Kronecker products..."
+
 @testset "atsite - Single Op" begin
     # atsite always takes a `site => dim` basis description, as returned by basis_info.
     bi = [1 => 2, 2 => 2, 3 => 2]

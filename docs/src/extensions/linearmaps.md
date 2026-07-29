@@ -20,7 +20,6 @@ its factors.
 LinearMap(op::Op,      basis; dims = nothing)
 LinearMap(os::OpSum,   basis)
 LinearMap(oc::OpChain, basis)
-LinearMap(op::AbstractOp)
 ```
 
 - `basis` is a plain vector of **site identifiers** — *not* the `site => dim` pairs the rest
@@ -29,7 +28,8 @@ LinearMap(op::AbstractOp)
 - `dims` gives the local dimension of each site. It is only accepted by the single-`Op`
   method. When omitted, *every* site is assumed to have the same dimension as `op.mat`, so
   it must be passed for systems with mixed local dimensions.
-- The one-argument form derives the basis from the operator itself via [`sites`](@ref).
+- `basis` is always required — unlike `sparse`/`Array`, there is no form that derives it from
+  the operator itself.
 
 `OpSum` maps are combined with `+` and `OpChain` maps with `*`, so a Hamiltonian built from
 either composes into a single `LinearMap`.

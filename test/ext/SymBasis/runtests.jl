@@ -10,16 +10,29 @@
 #     sparse(H::AbstractOp, ba::Basis; check_hermitian=true, tol=nothing)
 #     apply!(H::AbstractOp, v::AbstractVector, ba::Basis)
 #
-# Ground truth is built independently of the extension: the symmetry-adapted basis vectors
-# are assembled explicitly as columns of an isometry `V` from the symmetry group data
-# (`ba.sg`, `ba.norms`), and the reduced matrix must equal `V' * full_matrix * V`, where the
-# full matrix comes from the package's ordinary, well-tested `sparse(H, bi)` path. So a bug
-# in the extension cannot hide behind a matching bug in the reference.
+# Ground truth is built independently of the extension, on both sides of the reduction: the
+# symmetry-adapted basis vectors are assembled explicitly as columns of an isometry `V` from
+# the symmetry group data (`ba.sg`, `ba.norms`), and the full-space matrix is built locally
+# from `LinearAlgebra.kron` (see `fullmatrix` below) rather than through the package's own
+# conversion path (src/sparse.jl, src/kron.jl, src/array.jl). The reduced matrix must then
+# equal `V' * fullmatrix(H, bi) * V`.
+#
+# Building the reference this way means a bug in the extension cannot hide behind a matching
+# bug elsewhere in the same package, and it keeps this extension's CI job from depending on
+# core source files the extension does not actually use.
 
 using Test
 using LinearAlgebra
 using SparseArrays
 using OperatorAlgebra
+
+# Local copies of the operator matrices used here, so these tests do not depend on the
+# package's exported constants (src/op_constants.jl). Values match that file exactly.
+# Declared at top level because `const` is not allowed inside a `@testset` block's scope.
+const PX = [0 1; 1 0]
+const PY = [0 -im; im 0]
+const PZ = [1 0; 0 -1]
+const RAISEM = [0 0; 1 0]
 
 @testset "OperatorAlgebraSymBasisExt" begin
     @testset "extension loads on demand" begin
@@ -57,6 +70,23 @@ using OperatorAlgebra
         V
     end
 
+    # Reference embedding into the full Hilbert space, built independently of the package's own
+    # conversion path (src/kron.jl, src/sparse.jl, src/array.jl). A single-site operator is plain
+    # Kronecker padding, with the first site of `bi` the most significant factor. Every basis in
+    # this file is made of ordinary commuting sites, so no exchange strings are involved.
+    #
+    # Keeping this local is what lets these tests check the extension against something other than
+    # another part of the same package, and it is what keeps this extension's CI job independent
+    # of core files it does not actually use.
+    fullmatrix(o::Op, bi) = begin
+        sts, dims = first.(bi), last.(bi)
+        k = findfirst(==(o.site), sts)
+        isnothing(k) && error("site $(o.site) not in basis")
+        Matrix(kron(I(prod(dims[1:k-1])), Matrix(o.mat), I(prod(dims[k+1:end]))))
+    end
+    fullmatrix(oc::OpChain, bi) = prod(fullmatrix(o, bi) for o in oc.ops)
+    fullmatrix(os::OpSum, bi) = sum(fullmatrix(o, bi) for o in os.ops)
+
     """Momentum-`k` sector of an `N`-site spin-1/2 chain with periodic translations."""
     transbasis(N, k) = begin
         dofo = dof_object(Spin(1 // 2))
@@ -68,7 +98,7 @@ using OperatorAlgebra
     # Built from floating-point matrices, which is the ordinary case; integer matrices (a
     # past source of element-type bugs) are covered separately under "regressions".
 
-    fX, fY, fZ = ComplexF64.(PAULI_X), ComplexF64.(PAULI_Y), ComplexF64.(PAULI_Z)
+    fX, fY, fZ = ComplexF64.(PX), ComplexF64.(PY), ComplexF64.(PZ)
 
     bond(N, A, B) = sum(Op(A, i) * Op(B, mod1(i + 1, N)) for i in 1:N)
     heisenberg(N) = bond(N, fX, fX) + bond(N, fY, fY) + bond(N, fZ, fZ)
@@ -89,11 +119,11 @@ using OperatorAlgebra
         end
     end
 
-    @testset "sparse(H, ba) equals V' * sparse(H, bi) * V" begin
+    @testset "sparse(H, ba) equals V' * fullmatrix(H, bi) * V" begin
         for N in (3, 4)
             bi = refbasis(N)
             for (name, H) in (("Heisenberg", heisenberg(N)), ("Ising", ising(N)))
-                Hfull = Matrix(sparse(H, bi))
+                Hfull = fullmatrix(H, bi)
                 @testset "$name, N=$N" begin
                     for k in 0:(N-1)
                         ba = transbasis(N, k)
@@ -119,7 +149,7 @@ using OperatorAlgebra
         # matrix elements.
         for N in (3, 4)
             H = heisenberg(N)
-            full = sort(real(eigvals(Hermitian(Matrix(sparse(H, refbasis(N)))))))
+            full = sort(real(eigvals(Hermitian(fullmatrix(H, refbasis(N))))))
             reduced_ev = Float64[]
             for k in 0:(N-1)
                 ba = transbasis(N, k)
@@ -143,7 +173,7 @@ using OperatorAlgebra
     @testset "check_hermitian rejects a genuinely non-Hermitian operator" begin
         N = 4
         ba = transbasis(N, 0)
-        nonherm = Op(ComplexF64.(RAISE), 1) * Op(ComplexF64.(RAISE), 2)
+        nonherm = Op(ComplexF64.(RAISEM), 1) * Op(ComplexF64.(RAISEM), 2)
         @test_throws ArgumentError sparse(nonherm, ba)
         # ...and the guard must be suppressible.
         @test sparse(nonherm, ba; check_hermitian=false) isa SparseMatrixCSC
@@ -173,7 +203,7 @@ using OperatorAlgebra
         for N in (3, 4)
             bi = refbasis(N)
             H = sum(Op(A, i) * Op(A, i) for i in 1:N)
-            Hfull = Matrix(sparse(H, bi))
+            Hfull = fullmatrix(H, bi)
             for k in 0:(N-1)
                 ba = transbasis(N, k)
                 isempty(ba.states) && continue
@@ -228,10 +258,10 @@ using OperatorAlgebra
             # floated first.
             N, k = 3, 1
             ba = transbasis(N, k)
-            H = bond(N, PAULI_Z, PAULI_Z) + bond(N, PAULI_X, PAULI_X)   # Int matrices
+            H = bond(N, PZ, PZ) + bond(N, PX, PX)   # Int matrices
             @test eltype(H) <: Integer
 
-            Hfull = Matrix(sparse(H, refbasis(N)))
+            Hfull = fullmatrix(H, refbasis(N))
             V = projector(ba, N)
             @test Matrix(sparse(H, ba; check_hermitian=false)) ≈ V' * Hfull * V atol = 1e-9
 

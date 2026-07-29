@@ -1,6 +1,8 @@
 using Test
 using LinearAlgebra, SparseArrays
 
+@info "Testing Op constructors and basic operations..."
+
 @testset "Op Constructor Tests" begin
     @testset "Basic Construction" begin
         mat = [1 0; 0 1]

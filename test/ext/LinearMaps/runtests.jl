@@ -5,8 +5,12 @@
 #     julia --project=test/ext/LinearMaps test/ext/LinearMaps/runtests.jl
 #
 # The extension adds matrix-free `LinearMaps.LinearMap` constructors for operators. Ground
-# truth throughout is the package's ordinary `sparse(op, bi)` path: a LinearMap must act on
-# vectors exactly as the assembled sparse matrix does.
+# truth throughout is a local, independent Kronecker reference (`fullmatrix` below) built
+# straight from `LinearAlgebra.kron`, not the package's own `sparse(op, bi)` conversion: a
+# LinearMap must act on vectors exactly as that independently assembled matrix does. Checking
+# against a second implementation of the same package would let a bug in the extension hide
+# behind a matching bug in the reference, and it would tie this extension's CI job to core
+# conversion files (src/kron.jl, src/sparse.jl, src/array.jl) that it does not actually use.
 
 using Test
 using LinearAlgebra
@@ -21,26 +25,49 @@ end
 
 using LinearMaps: LinearMap
 
+# Local copies of the operator matrices used here, so these tests do not depend on the
+# package's exported constants (src/op_constants.jl). Values match that file exactly.
+const PX = [0 1; 1 0]
+const PY = [0 -im; im 0]
+const PZ = [1 0; 0 -1]
+
+# Reference embedding into the full Hilbert space, built independently of the package's own
+# conversion path (src/kron.jl, src/sparse.jl, src/array.jl). A single-site operator is plain
+# Kronecker padding, with the first site of `bi` the most significant factor. Every basis in
+# this file is made of ordinary commuting sites, so no exchange strings are involved.
+#
+# Keeping this local is what lets these tests check the extension against something other than
+# another part of the same package, and it is what keeps this extension's CI job independent
+# of core files it does not actually use.
+fullmatrix(o::Op, bi) = begin
+    sts, dims = first.(bi), last.(bi)
+    k = findfirst(==(o.site), sts)
+    isnothing(k) && error("site $(o.site) not in basis")
+    Matrix(kron(I(prod(dims[1:k-1])), Matrix(o.mat), I(prod(dims[k+1:end]))))
+end
+fullmatrix(oc::OpChain, bi) = prod(fullmatrix(o, bi) for o in oc.ops)
+fullmatrix(os::OpSum, bi) = sum(fullmatrix(o, bi) for o in os.ops)
+
 @testset "LinearMap Tests for Op" begin
-    @testset "Matches the sparse construction on random vectors" begin
+    @testset "Matches the Kronecker reference on random vectors" begin
         basis = [1, 2]
-        for op in (Op(PAULI_X, 1), Op(PAULI_Y, 2), Op(PAULI_Z, 2), Op([1 2; 3 4], 1), Op([2 0; 0 3], 1))
+        for op in (Op(PX, 1), Op(PY, 2), Op(PZ, 2), Op([1 2; 3 4], 1), Op([2 0; 0 3], 1))
             lm = LinearMap(op, basis)
             v = rand(ComplexF64, 4)
-            @test lm * v ≈ sparse(op, basis .=> 2) * v
+            @test lm * v ≈ fullmatrix(op, basis .=> 2) * v
         end
     end
 
     @testset "Basis-state actions" begin
         basis = [1, 2]
-        @test LinearMap(Op(PAULI_X, 1), basis) * [1, 0, 0, 0] ≈ [0, 0, 1, 0]        # X⊗I|00⟩ = |10⟩
-        @test LinearMap(Op(PAULI_X, 2), basis) * [1, 0, 0, 0] ≈ [0, 1, 0, 0]        # I⊗X|00⟩ = |01⟩
-        @test LinearMap(Op(PAULI_X, 1), basis) * [0, 1, 0, 0] ≈ [0, 0, 0, 1]        # X⊗I|01⟩ = |11⟩
-        @test LinearMap(Op(PAULI_Y, 1), basis) * [1.0 + 0im, 0, 0, 0] ≈ [0, 0, 1im, 0]  # Y⊗I|00⟩ = i|10⟩
-        @test LinearMap(Op(PAULI_Z, 2), basis) * [0, 1, 0, 0] ≈ [0, -1, 0, 0]       # I⊗Z|01⟩ = -|01⟩
+        @test LinearMap(Op(PX, 1), basis) * [1, 0, 0, 0] ≈ [0, 0, 1, 0]        # X⊗I|00⟩ = |10⟩
+        @test LinearMap(Op(PX, 2), basis) * [1, 0, 0, 0] ≈ [0, 1, 0, 0]        # I⊗X|00⟩ = |01⟩
+        @test LinearMap(Op(PX, 1), basis) * [0, 1, 0, 0] ≈ [0, 0, 0, 1]        # X⊗I|01⟩ = |11⟩
+        @test LinearMap(Op(PY, 1), basis) * [1.0 + 0im, 0, 0, 0] ≈ [0, 0, 1im, 0]  # Y⊗I|00⟩ = i|10⟩
+        @test LinearMap(Op(PZ, 2), basis) * [0, 1, 0, 0] ≈ [0, -1, 0, 0]       # I⊗Z|01⟩ = -|01⟩
 
         # middle site of three: I⊗X⊗I|000⟩ = |010⟩
-        lm = LinearMap(Op(PAULI_X, 2), [1, 2, 3])
+        lm = LinearMap(Op(PX, 2), [1, 2, 3])
         v = zeros(8)
         v[1] = 1
         expected = zeros(8)
@@ -104,15 +131,15 @@ end
     @testset "Acts as the sum of its terms" begin
         cases = [
             OpSum(Op([1 0; 0 1], 1), Op([1 0; 0 1], 2)),
-            OpSum(Op(PAULI_X, 1), Op(PAULI_X, 2)),
+            OpSum(Op(PX, 1), Op(PX, 2)),
             OpSum(Op([1 0; 0 1], 1), Op([0 1; 1 0], 1)),  # same site
             OpSum(Op([0 1; 1 0], 1)),                     # single term
-            OpSum(OpChain(Op(PAULI_X, 1), Op(PAULI_Z, 2)), Op([1 0; 0 1], 1)),  # chain term
+            OpSum(OpChain(Op(PX, 1), Op(PZ, 2)), Op([1 0; 0 1], 1)),  # chain term
         ]
         for opsum in cases
             lm = LinearMap(opsum, basis)
             v = rand(4)
-            @test lm * v ≈ sparse(opsum, basis .=> 2) * v
+            @test lm * v ≈ fullmatrix(opsum, basis .=> 2) * v
         end
     end
 
@@ -122,7 +149,7 @@ end
         @test lm * [1, 0, 0, 0] ≈ [2, 0, 0, 0]
 
         # (X⊗I + I⊗X)|00⟩ = |10⟩ + |01⟩
-        lm = LinearMap(OpSum(Op(PAULI_X, 1), Op(PAULI_X, 2)), basis)
+        lm = LinearMap(OpSum(Op(PX, 1), Op(PX, 2)), basis)
         @test lm * [1, 0, 0, 0] ≈ [0, 1, 1, 0]
 
         # ((I + X)⊗I)|00⟩ = |00⟩ + |10⟩
@@ -130,7 +157,7 @@ end
         @test lm * [1, 0, 0, 0] ≈ [1, 0, 1, 0]
 
         # (Y⊗I + I⊗I)|00⟩ = |00⟩ + i|10⟩
-        lm = LinearMap(OpSum(Op(PAULI_Y, 1), Op([1 0; 0 1], 2)), basis)
+        lm = LinearMap(OpSum(Op(PY, 1), Op([1 0; 0 1], 2)), basis)
         @test lm * [1.0 + 0im, 0, 0, 0] ≈ [1, 0, 1im, 0]
     end
 
@@ -148,19 +175,19 @@ end
 @testset "LinearMap Tests for OpChain" begin
     basis = [1, 2]
 
-    @testset "Acts as the chain's matrix (agrees with sparse)" begin
+    @testset "Acts as the chain's matrix (agrees with the Kronecker reference)" begin
         cases = [
-            OpChain(Op(PAULI_X, 1), Op(PAULI_X, 2)),
-            OpChain(Op(PAULI_X, 1), Op(PAULI_Z, 2)),
-            OpChain(Op(PAULI_X, 1), Op(PAULI_Z, 1)),        # non-commuting, same site
+            OpChain(Op(PX, 1), Op(PX, 2)),
+            OpChain(Op(PX, 1), Op(PZ, 2)),
+            OpChain(Op(PX, 1), Op(PZ, 1)),        # non-commuting, same site
             OpChain(Op([1 2; 0 1], 1), Op([1 0; 3 1], 1)),  # order-sensitive
-            OpChain(Op(PAULI_Y, 1), Op(PAULI_X, 2)),        # complex
+            OpChain(Op(PY, 1), Op(PX, 2)),        # complex
             OpChain(Op([0 1; 1 0], 1)),                     # single factor
         ]
         for chain in cases
             lm = LinearMap(chain, basis)
             v = rand(ComplexF64, 4)
-            @test lm * v ≈ sparse(chain, basis .=> 2) * v
+            @test lm * v ≈ fullmatrix(chain, basis .=> 2) * v
         end
     end
 
@@ -191,7 +218,7 @@ end
         v = rand(4)
 
         @test lm isa LinearMap
-        @test lm * v ≈ sparse(chain, basis .=> 2) * v
+        @test lm * v ≈ fullmatrix(chain, basis .=> 2) * v
     end
 
     @testset "Symbol basis and laziness" begin
@@ -219,7 +246,7 @@ end
         v = rand(ComplexF64, 8)
 
         @test size(lm) == (8, 8)
-        @test lm * v ≈ sparse(opsum, basis .=> 2) * v
+        @test lm * v ≈ fullmatrix(opsum, basis .=> 2) * v
     end
 
     @testset "Custom dims consistency" begin

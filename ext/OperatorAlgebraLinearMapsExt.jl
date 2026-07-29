@@ -16,7 +16,7 @@ lm = LinearMap(Op(PAULI_X, 1) * Op(PAULI_Z, 2), [1, 2])
 module OperatorAlgebraLinearMapsExt
 
 using OperatorAlgebra
-using OperatorAlgebra: AbstractOp, Op, OpChain, OpSum, sites
+using OperatorAlgebra: AbstractOp, Op, OpChain, OpSum
 
 using LinearAlgebra
 using LinearMaps
@@ -25,7 +25,6 @@ using LinearMaps
     LinearMap(op::Op, basis; dims=nothing)
     LinearMap(os::OpSum, basis)
     LinearMap(oc::OpChain, basis)
-    LinearMap(op::AbstractOp)
 
 Create a matrix-free LinearMap representation of an operator.
 
@@ -44,7 +43,8 @@ linear solvers from packages like IterativeSolvers.jl or KrylovKit.jl.
   mixed local dimensions. Accepted by the single-`Op` method only -- the `OpSum`/`OpChain`
   methods take no `dims`, since they build their factors' maps with the default.
 
-Omitting `basis` derives it from the operator itself via `sites(op)`.
+`basis` is always required: unlike `sparse`/`Array`, there is no form that derives it from the
+operator itself.
 
 # Returns
 A `LinearMap` object that supports matrix-vector multiplication
@@ -70,7 +70,6 @@ LinearMap(Op(rand(3, 3), 2), [1, 2, 3], dims=[2, 3, 2])
 - `LinearMap(op::Op, basis; dims)`: Single operator
 - `LinearMap(os::OpSum, basis)`: Sum of operators (combines LinearMaps with `+`)
 - `LinearMap(oc::OpChain, basis)`: Product of operators (composes LinearMaps with `*`)
-- `LinearMap(op::AbstractOp)`: Any operator, with the basis derived from `sites(op)`
 
 See also: `sparse`, `apply`, `basis_info`
 """
@@ -102,5 +101,4 @@ LinearMaps.LinearMap(os::OpSum{Tid}, basis::AbstractVector{Tid}) where {Tid} =
 LinearMaps.LinearMap(oc::OpChain{Tid}, basis::AbstractVector{Tid}) where {Tid} =
     prod(LinearMap(op, basis) for op in oc.ops)
 
-LinearMaps.LinearMap(op::AbstractOp) = LinearMap(op, sites(op))
 end # module

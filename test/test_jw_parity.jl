@@ -4,6 +4,8 @@ using OperatorAlgebra: atsite
 using LinearAlgebra
 using SparseArrays
 
+@info "Testing Jordan-Wigner parity splitting..."
+
 # Parity-split Jordan-Wigner embedding: only the odd-parity (off-diagonal) part of a
 # fermionic operator drags a Z string across preceding sites; the even (diagonal) part
 # -- occupation, identity -- must embed with plain identities.
