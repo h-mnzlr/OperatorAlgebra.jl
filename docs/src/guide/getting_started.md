@@ -1,5 +1,11 @@
 # Getting Started
 
+```@meta
+DocTestSetup = quote
+    using OperatorAlgebra, LinearAlgebra, SparseArrays, Random
+end
+```
+
 ## Installation
 
 OperatorAlgebra.jl can be installed from the Julia package manager. To install the latest released version, use the Julia REPL package mode (`]`):
@@ -24,13 +30,23 @@ An operator in quantum mechanics is an abstract object living in a Hilbert space
 
 In a tensor product space, each "site" has its own local Hilbert space. For example, in a spin chain, each site might be a two-level system (spin-1/2).
 
-The `basis` is a vector of site identifiers that defines the structure of your system:
+The structure of your system is described by a vector of `site => dim` pairs, giving the
+local Hilbert space dimension at each site. This is what [`basis_info`](@ref) returns, and
+what the matrix representations and [`apply`](@ref) expect:
 
-```julia
-basis = [1, 2, 3]  # Three sites labeled 1, 2, 3
-# or
-basis = ["A", "B", "C"]  # Sites can have any identifiers
+```jldoctest
+julia> bi = [1 => 2, 2 => 2, 3 => 2];  # Three 2-level sites labeled 1, 2, 3
+
+julia> bi = ["A" => 2, "B" => 3, "C" => 2];  # Any identifiers, differing local dimensions
+
+julia> prod(last, bi)  # total dimension of the full Hilbert space
+12
+
 ```
+
+Site identifiers can be anything — integers, strings, symbols, tuples — which is what makes
+lattices and multi-species models easy to express. The order of the pairs fixes the tensor
+product ordering, with the first site as the most significant index.
 
 ## First Steps
 
@@ -38,55 +54,105 @@ basis = ["A", "B", "C"]  # Sites can have any identifiers
 
 We use the provided constant for the X-Pauli matrix to create a simple one-site operator at a site identified by `1`. 
 
-```julia
-# Create a Pauli X operator on site 1
-σx = Op(PAULI_X, 1)
+```jldoctest gettingstarted
+julia> σx = Op(PAULI_X, 1)  # a Pauli X operator on site 1
+Op(site=1, mat=[0 1; 1 0])
 
-# Create a custom operator
-my_matrix = [1.0 0.5; 0.5 -1.0]
-custom_op = Op(my_matrix, 2)
+julia> my_matrix = [1.0 0.5; 0.5 -1.0];
+
+julia> custom_op = Op(my_matrix, 2)  # a custom operator
+Op(site=2, mat=[1.0 0.5; 0.5 -1.0])
+
 ```
 
 We can also combine operators to create more complex ones: The representation of the operators does not allocate any memory and is therefore very efficient.
 
-```julia
-# Multiplication creates an OpChain
-product = σx * Op(PAULI_Y, 2)
+```jldoctest gettingstarted
+julia> product = σx * Op(PAULI_Y, 2);  # multiplication creates an OpChain
 
-# Addition creates an OpSum
-sum_op = σx + Op(PAULI_Z, 2)
+julia> typeof(product).name.wrapper
+OpChain
 
-# Can combine both
-H = σx + 0.5 * σx * Op(PAULI_Z, 2)
+julia> sum_op = σx + Op(PAULI_Z, 2);  # addition creates an OpSum
+
+julia> typeof(sum_op).name.wrapper
+OpSum
+
+julia> H = σx + 0.5 * σx * Op(PAULI_Z, 2);  # both can be combined
+
 ```
 
 While this package provides some application for the operators, the main purpose is to create and manipulate them algebraically before converting them to matrix representations. Hence, in most cases, you will want to convert them to a Matrix type before using them in calculations. Here, we convert the operator `H` to a sparse matrix representation, and to a linear map.
 
-```julia
-# Define the system
-basis = [1, 2]
+```jldoctest gettingstarted
+julia> bi = [1 => 2, 2 => 2];  # describe the system: a `site => dim` pair per site
 
-# Convert to sparse matrix
-H_matrix = sparse(H, basis)
+julia> H_matrix = sparse(H, bi);  # convert to a sparse matrix
 
-# For large systems, use LinearMaps
-using LinearMaps
-H_lm = LinearMap(H, basis)
+julia> H_matrix == sparse(H)  # leaving out `bi` derives it from the operator itself
+true
+
 ```
 
-### Working with States
-
-This package also provides limited functionality to work with product states. A product state is represented as a vector of local state vectors, one for each site. The `apply` function can be used to apply operators to these product states. Note that `apply` only works for operators that preserve the product state structure (i.e., single-site operators and their products), and not for sums of operators.
+For large systems a matrix-free `LinearMap` avoids storing the matrix at all (this needs
+LinearMaps.jl loaded, which activates the corresponding package extension):
 
 ```julia
-# Define a product state |↑↓⟩
-state = [
-    [1.0, 0.0],  # |↑⟩ on site 1
-    [0.0, 1.0]   # |↓⟩ on site 2
-]
+using LinearMaps
+H_lm = LinearMap(H, [1, 2])
+```
 
-# Apply an operator
-new_state = apply(σx, state)
+Note the two different descriptions of a system appearing here. Most of the package takes a
+*basis description* `bi`: a vector of `site => dim` pairs giving each site's local Hilbert
+space dimension, as returned by [`basis_info`](@ref). `LinearMap` still takes a bare vector
+of site identifiers.
+
+### Applying Operators to States
+
+Operators can also be applied to states directly, without ever building a matrix. States
+here live on the **full** Hilbert space described by `bi`, with the first site of `bi` as the
+most significant index — the same ordering the matrix representations use.
+
+```jldoctest gettingstarted
+julia> v = [1.0, 0.0, 0.0, 0.0];  # |00⟩
+
+julia> w = apply(H, v, bi)  # same result as `sparse(H, bi) * v`, but matrix-free
+4-element Vector{Float64}:
+ 0.0
+ 0.0
+ 1.5
+ 0.0
+
+julia> w == sparse(H, bi) * v
+true
+
+julia> out = similar(v);  # in-place version; `out` must not alias `v`
+
+julia> apply!(out, H, v, bi) == w
+true
+
+```
+
+A single basis state can be applied by its index, which returns the resulting superposition
+as a `Dict` mapping basis index to amplitude — exactly column `i` of the matrix
+representation:
+
+```jldoctest gettingstarted
+julia> apply(Op(PAULI_X, 2), 1, bi)  # X₂|00⟩ = |01⟩
+Dict{Int64, Int64} with 1 entry:
+  2 => 1
+
+```
+
+This works for every operator type, sums included. If the same operator is applied many
+times, [`compile_apply`](@ref) builds a specialized kernel for it up front:
+
+```jldoctest gettingstarted
+julia> c = compile_apply(H, bi);
+
+julia> c(v) == w
+true
+
 ```
 
 

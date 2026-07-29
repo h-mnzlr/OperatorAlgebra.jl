@@ -7,9 +7,11 @@ OperatorAlgebra provides efficient representations and operations for quantum op
 acting on tensor product spaces, with support for:
 
 - **Flexible operator types**: [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref)
-- **Tensor products**: Extend single-site operators to the full Hilbert space with [`atsite`](@ref)
+- **Tensor products**: Single-site operators are extended to the full Hilbert space
+  automatically when converted with `Array`/`sparse`
 - **Multiple backends**: Sparse matrices, dense matrices, and matrix-free LinearMaps
-- **Product state operations**: Efficient [`apply`](@ref) for tensor product states
+- **Matrix-free application**: [`apply`](@ref) computes `H * v` straight from the operator's
+  algebraic structure, without ever building a matrix
 
 # Main Types
 - [`AbstractOp`](@ref): Base type for all operators
@@ -18,12 +20,12 @@ acting on tensor product spaces, with support for:
 - [`OpSum`](@ref): Sum of operators (A + B + C)
 
 # Key Functions
-- [`apply`](@ref), [`apply!`](@ref): Apply operators to product states (allocating/in-place)
+- [`apply`](@ref), [`apply!`](@ref): Apply an operator to a state vector, a basis state index,
+  or a `Dict` of basis states, without building a matrix (allocating/in-place)
 - [`compile_apply`](@ref), [`compile_apply!`](@ref): Same, but pre-compile a specialized
   kernel for a fixed operator (allocating/in-place)
-- [`atsite`](@ref): Extend operator to full Hilbert space, given a `site => dim` basis
-  description as returned by [`basis_info`](@ref)
-- `sparse`: Convert to sparse matrix representation
+- `Array`, `Matrix{T}`, `sparse`: Convert to a dense or sparse matrix over the full Hilbert
+  space, given a `site => dim` basis description as returned by [`basis_info`](@ref)
 - `LinearMap`: Create matrix-free representation
 - [`fermion`](@ref): Tag a site (or a whole operator/chain/sum) as fermionic; see
   [`AbstractSite`](@ref)/[`ExchangeStyle`](@ref) for defining a custom site with its own
@@ -37,8 +39,8 @@ Common quantum operators are exported as constants:
 
 # Custom Sites
 Sites are plain identifiers (`Int`, `Symbol`, tuples, ...) by default, and every operation
-(`atsite`, `apply`, `compile_apply`, `normal_order`, `tr`, ...) already works with them as
-ordinary commuting (bosonic/distinguishable) degrees of freedom. A site with different
+(`Array`/`sparse`, `apply`, `compile_apply`, `normal_order`, `tr`, ...) already works with
+them as ordinary commuting (bosonic/distinguishable) degrees of freedom. A site with different
 commutation relations is a subtype of [`AbstractSite`](@ref) that declares its
 [`ExchangeStyle`](@ref) -- [`fermion`](@ref)/[`FermionSite`](@ref) is the built-in example.
 Declaring `exchange_style(::MySite) = Fermionic()` (and, if needed, overriding
@@ -59,12 +61,13 @@ H = σx + σz + 0.5 * σx * σz
 # Convert to matrix
 H_matrix = sparse(H)  # equivalent to sparse(H, basis_info(H))
 
-# Apply to product state
-state = [[1.0, 0.0], [1.0, 0.0]]
-new_state = apply(σx, state)
+# ...or apply it to a state vector without building a matrix
+bi = [1 => 2, 2 => 2]
+v = [1.0, 0.0, 0.0, 0.0]
+w = apply(H, v, bi)
 ```
 
-See also: [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref), [`apply`](@ref), [`atsite`](@ref)
+See also: [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref), [`apply`](@ref), [`basis_info`](@ref)
 """
 module OperatorAlgebra
 

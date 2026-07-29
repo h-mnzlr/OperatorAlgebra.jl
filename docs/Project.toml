@@ -1,7 +1,17 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
+Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 OperatorAlgebra = "49087e99-997d-48ed-8945-d57b707c274b"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
+# LinearMaps and Latexify are light enough to carry here so their extension pages can be
+# real doctests. ITensorMPS and SymBasis are deliberately left out -- ITensorMPS alone costs
+# ~84 packages -- so those two pages use plain (unexecuted) code blocks.
 [compat]
 Documenter = "1"
+Latexify = "0.16.10"
+LinearMaps = "3"

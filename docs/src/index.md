@@ -2,6 +2,9 @@
 
 ```@meta
 CurrentModule = OperatorAlgebra
+DocTestSetup = quote
+    using OperatorAlgebra, LinearAlgebra, SparseArrays, Random
+end
 ```
 
 
@@ -28,23 +31,29 @@ Operator Algebra provides a minimalist framework to construct Hamiltonians of ar
 
 ## Quick Example
 
-```julia
-using OperatorAlgebra
+```jldoctest
+julia> using OperatorAlgebra, SparseArrays
 
-# Define Pauli operators on different sites
-σx = Op(PAULI_X, 1)
-σz = Op(PAULI_Z, 2)
+julia> σx = Op(PAULI_X, 1); σz = Op(PAULI_Z, 2);
 
-# Build a Hamiltonian
-H = σx + σz + 0.5 * σx * σz
+julia> H = σx + σz + 0.5 * σx * σz;  # build a Hamiltonian
 
-# Convert to sparse matrix
-basis = [1, 2]
-H_matrix = sparse(H, basis)
+julia> H_matrix = sparse(H);  # basis derived automatically via basis_info(H)
 
-# Apply to a product state
-state = [[1.0, 0.0], [1.0, 0.0]]  # |00⟩
-new_state = apply(σx, state)       # |10⟩
+julia> size(H_matrix)
+(4, 4)
+
+julia> bi = [1 => 2, 2 => 2];  # a `site => dim` basis description
+
+julia> v = [1.0, 0.0, 0.0, 0.0];  # |00⟩
+
+julia> apply(H, v, bi)  # applied without ever building a matrix
+4-element Vector{Float64}:
+ 1.0
+ 0.0
+ 1.5
+ 0.0
+
 ```
 
 ## Contents

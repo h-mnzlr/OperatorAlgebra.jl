@@ -38,11 +38,10 @@ H_scaled = 2.0 * H  # Scales all terms
 ```
 
 # Notes
-- `apply` and `apply!` are not defined for `OpSum` on product states, as the result
-  is generally not a product state. Convert to a matrix representation first using
-  `sparse` or `LinearMap`.
+- [`apply`](@ref)/[`apply!`](@ref) support `OpSum`: each term is applied to the state over
+  the full Hilbert space and the results are summed, so no matrix has to be built.
 
-See also: [`Op`](@ref), [`OpChain`](@ref), `sparse`, `LinearMap`
+See also: [`Op`](@ref), [`OpChain`](@ref), [`apply`](@ref), `sparse`, `LinearMap`
 """
 struct OpSum{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}

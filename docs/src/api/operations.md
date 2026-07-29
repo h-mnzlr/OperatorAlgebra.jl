@@ -2,12 +2,14 @@
 
 ```@meta
 CurrentModule = OperatorAlgebra
+DocTestSetup = quote
+    using OperatorAlgebra, LinearAlgebra, SparseArrays, Random
+end
 ```
 
-## Tensor Products
+## Sites and Basis
 
 ```@docs
-atsite
 basis_info
 sites
 mapsites
@@ -24,32 +26,73 @@ compile_apply!
 
 ## Matrix Representations
 
-### Sparse Matrices
+Every conversion embeds the operator into the **full** Hilbert space described by a
+`site => dim` basis description `bi`, inserting identities at the sites the operator does not
+touch. There is no per-term or per-factor conversion: an `Op`, `OpChain` and `OpSum` all go
+through the same path and all produce a matrix of size `prod(last, bi)`. Omitting `bi`
+derives it from the operator itself via [`basis_info`](@ref).
 
-The `sparse` function from SparseArrays is extended to work with operators:
+| Call | Result |
+|---|---|
+| `sparse(op[, bi])` | `SparseMatrixCSC`, element type taken from the operator |
+| `Array(op[, bi])` | dense `Matrix`, element type taken from the operator |
+| `Matrix{T}(op[, bi])` | dense `Matrix{T}`, converting the element type |
 
-- `sparse(op::Op)`: Convert operator's matrix to sparse format
-- `sparse(op::OpSum)`: Convert all matrices in the sum to sparse format  
-- `sparse(op::OpChain)`: Convert all matrices in the chain to sparse format
-- `sparse(op::AbstractOp, bi)`: Convert to full Hilbert space sparse matrix, where `bi` is a `site => dim` basis description as returned by `basis_info`
-- `sparse(op::AbstractOp)`: Same, deriving `bi` automatically via `basis_info(op)`
+`Matrix` requires its element type — `Matrix{ComplexF64}(op)` works, plain `Matrix(op)` is
+not defined. Use `Array(op)` for the dense form that keeps the natural element type.
+
+```@docs
+SparseArrays.sparse(::AbstractOp, ::AbstractVector{<:Pair})
+```
 
 See the [Matrix Representations](../guide/matrix_representation.md) guide for examples.
 
-### LinearMaps
+### Recovering an operator from a matrix
 
-The `LinearMap` function from LinearMaps.jl is extended to work with operators:
+[`decompose`](@ref) runs the conversions above backwards: given a matrix over the full
+Hilbert space and the same `site => dim` basis description, it recovers an [`OpSum`](@ref)
+of tensor products of local operators that reproduces it. Round-tripping is exact:
 
-- `LinearMap(op::Op, basis)`: Create matrix-free representation
-- `LinearMap(os::OpSum, basis)`: Sum of LinearMaps
-- `LinearMap(oc::OpChain, basis)`: Product of LinearMaps
+```jldoctest
+julia> bi = [1 => 2, 2 => 2];
 
-See the [Matrix Representations](../guide/matrix_representation.md) guide for examples.
+julia> H = Op(PAULI_X, 1) * Op(PAULI_Z, 2) + Op(PAULI_Y, 1);
+
+julia> D = decompose(Array(H, bi), bi);
+
+julia> Array(D, bi) == Array(H, bi)
+true
+```
+
+`tol` sets the threshold below which a term is treated as absent, which keeps floating-point
+noise from turning a sparse operator into a dense sum of every possible local product:
+
+```jldoctest
+julia> bi = [1 => 2, 2 => 2];
+
+julia> noisy = Array(Op(PAULI_X, 1), bi) + 1e-14 * ones(4, 4);
+
+julia> length(decompose(noisy, bi).ops)  # default tol = 1e-10 drops the noise
+2
+
+julia> length(decompose(noisy, bi; tol = 1e-20).ops)  # ...the noise becomes terms
+9
+```
+
+```@docs
+decompose
+```
 
 ## Normal Ordering & Simplification
 
+These three rewrite an operator without changing what it represents: [`normal_order`](@ref)
+reorders the factors of each product to follow the basis order, [`flattenop`](@ref) expands
+it into a flat sum of products, and [`simplify`](@ref) searches for a shorter equivalent
+expression.
+
 ```@docs
 normal_order
+flattenop
 simplify
 commutator
 ```
@@ -60,21 +103,28 @@ commutator
 LinearAlgebra.tr
 ```
 
-## ITensorMPS Integration
+## Extensions
 
-When ITensorMPS.jl is loaded, operators can be converted to Matrix Product Operators (MPOs):
+Loading a companion package activates further conversions — matrix-free `LinearMap`s, ITensor
+`MPO`s, LaTeX rendering and symmetry-reduced matrices. These are documented in their own
+section, since each follows its companion package's conventions rather than this one's:
 
-```julia
-using OperatorAlgebra
-using ITensorMPS  # Extension loads automatically
+- [Extensions overview](../extensions/index.md)
+- [LinearMaps](../extensions/linearmaps.md) — `LinearMap(op, basis; dims)`
+- [ITensorMPS](../extensions/itensormps.md) — `MPO(op, sites)`
+- [Latexify](../extensions/latexify.md) — `latexify(op)` / `latexraw(op)`
+- [SymBasis](../extensions/symbasis.md) — `sparse(H, ba)` / `apply!(H, v, ba)`
 
-sites = siteinds("S=1/2", 4)
-H = Op(PAULI_X, 1) + Op(PAULI_Z, 2)
-mpo = MPO(H, sites)
+## Internals
+
+The following is **not** public API: it is not exported, and its signature and behavior may
+change without notice. It is documented here only because the docstrings above refer to it
+when describing how the embedding into the full Hilbert space works. Use `Array`, `sparse`
+or `Matrix{T}` instead.
+
+```@docs
+atsite
 ```
-
-The extension provides:
-- `MPO(op::AbstractOp, sites)`: Convert any OperatorAlgebra operator to an ITensorMPS MPO
 
 ## Index
 

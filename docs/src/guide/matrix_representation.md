@@ -1,104 +1,116 @@
 # Matrix Representation of Operators
 
-OperatorAlgebra.jl also exposes some of its functionality to cast operators into matrix representations using Kronecker products. In particular, the `atsite` function is useful to extend single-site operators to the full Hilbert space.
-
-## Cast operators into matrix representation
-
-The `atsite` function casts a single-site operator into its matrix representation. By definition, a single-site operator acts non-trivially only on one site in a tensor product space, and as identity on all other sites.
-
-### Basic atsite
-
-`atsite` takes a `site => dim` basis description (a "basis info"), as returned by
-[`basis_info`](@ref) since it needs to know each site's local dimension to build the identities it inserts elsewhere.
-
-```julia
-# Define a 3-site system: three 2-dimensional sites
-bi = [1 => 2, 2 => 2, 3 => 2]
-
-# Pauli X on site 2
-σx = Op(PAULI_X, 2)
-
-# Extend to full space: I ⊗ σx ⊗ I
-σx_full = atsite(σx, bi)
-# Result is an 8×8 matrix
+```@meta
+DocTestSetup = quote
+    using OperatorAlgebra, LinearAlgebra, SparseArrays, Random
+end
 ```
 
-### With Transformations
+The main goal of this package is to create and manipulate operators algebraically before
+converting them to matrix representations. Once you do want a matrix, OperatorAlgebra.jl
+builds it over the full tensor product space for you, inserting the identities on every site
+the operator does not touch. Depending on the system size and computational needs, different
+matrix representations should be chosen.
 
-You can apply a transformation function (like `sparse`). This allows you to, e.g., efficiently allocate a sparse matrix representation directly. To make the tool flexible, arbitrary functions can be provided. The function is applied to the matrix object of the operator (`op.mat`).
+## The basis description
 
-```julia
-# Convert to sparse in the process: I ⊗ sparse(σx) ⊗ I
-σx_sparse = atsite(sparse, σx, bi)
+All matrix conversions take a *basis description* `bi`: a vector of `site => dim` pairs
+giving each site's local Hilbert space dimension. The dimensions are needed to build the
+identities inserted at the untouched sites, and the order of the pairs fixes the tensor
+product ordering, with the first site as the most significant (leftmost) factor.
 
-# Custom transformation: I ⊗ f(σx) ⊗ I
-f(x) = 2.0 * x
-σx_scaled = atsite(f, σx, bi)
+```jldoctest matrixrep
+julia> bi = [1 => 2, 2 => 2, 3 => 2];  # a 3-site system: three 2-dimensional sites
+
+julia> σx = Op(PAULI_X, 2);  # Pauli X on site 2
+
+julia> σx_full = Array(σx, bi);  # extended to the full space: I ⊗ σx ⊗ I
+
+julia> size(σx_full)
+(8, 8)
+
 ```
+
+### Deriving the basis automatically
+
+Leaving `bi` out derives it from the operator itself with [`basis_info`](@ref), which
+collects each site's dimension (and checks they are consistent):
+
+```jldoctest matrixrep
+julia> H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:7);
+
+julia> basis_info(H)
+8-element Vector{Pair{Int64, Int64}}:
+ 1 => 2
+ 2 => 2
+ 3 => 2
+ 4 => 2
+ 5 => 2
+ 6 => 2
+ 7 => 2
+ 8 => 2
+
+julia> Array(H) == Array(H, basis_info(H))
+true
+
+```
+
+Pass `bi` explicitly whenever the operator does not mention every site of your system — a
+term that happens to act only on sites 1 and 2 would otherwise silently produce a matrix
+over just those two sites.
 
 ### Variable Dimensions
 
-Since `bi` already carries each site's dimension, sites with different local dimensions
-just need their own `dim` in the pairs — there is no separate `dims` argument.
+Since `bi` carries each site's dimension individually, sites with different local dimensions
+need nothing beyond their own `dim` in the pairs:
 
-```julia
-# Site 1: dimension 2, Site 2: dimension 3, Site 3: dimension 2
-bi = [1 => 2, 2 => 3, 3 => 2]
+```jldoctest matrixrep
+julia> bi_mixed = [1 => 2, 2 => 3, 3 => 2];  # site 2 has local dimension 3
 
-# Create a 3×3 operator for site 2
-op_3x3 = Op(rand(3, 3), 2)
+julia> op_3x3 = Op(rand(3, 3), 2);  # a 3×3 operator on site 2
 
-# Extend with correct dimensions
-op_full = atsite(op_3x3, bi)
-# Result is 12×12 (2 × 3 × 2)
+julia> size(Array(op_3x3, bi_mixed))  # 2 × 3 × 2
+(12, 12)
+
 ```
-
-### Deriving bi automatically
-
-For a Hamiltonian built from many operators, [`basis_info`](@ref) collects each site's
-dimension (and checks they're consistent) directly from the operator itself:
-
-```julia
-H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:7)
-H_full = atsite(H, basis_info(H))
-
-# sparse(op) and Array(op)/Matrix(op) (with no explicit basis) do exactly this
-H_sparse = sparse(H)  # equivalent to sparse(H, basis_info(H))
-```
-
-For completeness, the `atsite` functionality can also be used to extend operators that act on multiple sites, e.g., an `OpChain` or `OpSum` operator. In this case, the operator is simply extended as a whole to the full Hilbert space. Ususally, this feature is not recommended, as there are usually more optimized ways to construct such operators directly in the full space for a given matrix type, e.g., for sparse matrices.
 
 ## Matrix Representations
 
-The main goal of this package is to create and manipulate operators algebraically before converting them to matrix representations. Depending on the system size and computational needs, different matrix representations should be chosen.
-
 ### Dense Matrices
 
-```julia
-bi = (1:8) .=> 2  # 8 sites, each dimension 2
+`Array` produces a dense matrix, keeping the element type that results from the operator's
+own matrices. `Matrix{T}` converts to a specific element type in the process.
 
-# Single operator
-σx = Op(PAULI_X, 4)
-σx_matrix = Array(σx, bi)
+```jldoctest matrixrep
+julia> bi8 = (1:8) .=> 2;  # 8 sites, each of dimension 2
 
-# Hamiltonian
-H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:7)
-H_matrix = Array(H, bi)
+julia> σx_matrix = Array(Op(PAULI_X, 4), bi8);  # single operator
 
-# Or let basis_info derive it from H itself
-H_matrix = Array(H)
+julia> H_matrix = Array(H, bi8);  # Hamiltonian
+
+julia> H_matrix == Array(H)  # or let basis_info derive the basis from H itself
+true
+
+julia> eltype(Matrix{ComplexF64}(H, bi8))  # fixing the element type
+ComplexF64 (alias for Complex{Float64})
+
 ```
+
+Note that `Matrix` needs its element type: `Matrix{ComplexF64}(H)` works, plain `Matrix(H)`
+is not defined — use `Array(H)` for the dense form that keeps the natural element type.
 
 ### Sparse Matrices
 
-```julia
-using SparseArrays
-bi = (1:12) .=> 2
+```jldoctest matrixrep
+julia> using SparseArrays
 
-# Hamiltonian
-H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:11)
-H_matrix = sparse(H, bi)
-H_matrix = sparse(H)  # equivalent, via basis_info(H)
+julia> bi12 = (1:12) .=> 2;
+
+julia> Hbig = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:11);
+
+julia> sparse(Hbig, bi12) == sparse(Hbig)  # `bi` may be omitted, via basis_info(Hbig)
+true
+
 ```
 
 ### LinearMaps
@@ -115,32 +127,104 @@ v = normalize!(rand(2^20))
 result = H_lm * v
 ```
 
-## Working with Product States
+## Applying Operators Without Building a Matrix
 
-In some cases, it can be useful to work with product states directly without allocating on the full Hilbert space. For this, we provide limited funcionality to represent and manipulate product states via the `apply` function. Product states are represented as vectors of local state vectors, one for each site and applying and operator to this state is exactly applying the saved matrix of an operator to the local vector at the corresponding site. Hence, when using non-integer site identifiers, the order of basis elements has to be provided to `apply` to ensure correct mapping between site identifiers and local state vectors. Note, there are also corresponding in-place versions of `apply` provided, called `apply!`, to allow for efficient implementations.
+For large systems it is often wasteful to materialize the matrix at all: if you only ever
+need `H * v`, [`apply`](@ref) computes it directly from the operator's algebraic structure.
+States are ordinary dense vectors over the **full** Hilbert space described by `bi`, using
+the same index ordering as the matrix representations (first site of `bi` most significant),
+so `length(v)` must equal `prod(last, bi)`.
 
-### Representing States
+### Applying to a state vector
 
-```julia
-# Three-site system, each site is a 2-level system
-state = [
-    [1.0, 0.0],  # site 1
-    [1.0, 0.0],  # site 2
-    [0.0, 1.0]   # site 3
-]
+```jldoctest matrixrep
+julia> bi2 = [1 => 2, 2 => 2];
 
-# Non-mutating
-new_state = apply(Op(PAULI_X, 1), state)
+julia> v = [1.0, 0.0, 0.0, 0.0];  # |00⟩
 
-# Mutating (more efficient)
-apply!(Op(PAULI_X, 1), state)
+julia> apply(Op(PAULI_X, 2), v, bi2)  # |01⟩; same as `sparse(op, bi2) * v`
+4-element Vector{Float64}:
+ 0.0
+ 1.0
+ 0.0
+ 0.0
 
-# OpChain applies operators in sequence
-chain = Op(PAULI_X, 1) * Op(PAULI_Z, 2)
-result = apply(chain, state)
+julia> out = similar(v);  # in-place: `out` must not alias `v`
 
-# generic site identifiers
-apply(Op(PAULI_X, :site1), state, [:site1, :site2, :site3])
+julia> apply!(out, Op(PAULI_X, 1), v, bi2)
+4-element Vector{Float64}:
+ 0.0
+ 0.0
+ 1.0
+ 0.0
+
+julia> apply(Op(PAULI_X, 1), [1.0, 0.0])  # `bi` may be omitted, via basis_info
+2-element Vector{Float64}:
+ 0.0
+ 1.0
+
 ```
 
-`apply` only works for operations that preserve the product state structure. This means that sums of operators cannot be applied directly, as they generally create entanglement between sites and thus destroy the product state structure.
+This works for every operator type. An `OpChain` applies its factors in sequence, with the
+rightmost factor acting first, and an `OpSum` sums the contributions of its terms:
+
+```jldoctest matrixrep
+julia> apply(Op(PAULI_X, 1) * Op(PAULI_Z, 1), [1.0, 0.0], [1 => 2])
+2-element Vector{Float64}:
+ 0.0
+ 1.0
+
+julia> apply(Op(PAULI_X, 1) + Op(PAULI_Z, 2), v, bi2)
+4-element Vector{Float64}:
+ 1.0
+ 0.0
+ 1.0
+ 0.0
+
+```
+
+### Applying to basis states
+
+A single basis state can be given by its (1-based) index, in which case the result is
+returned sparsely as a `Dict` mapping basis index to amplitude. This is exactly column `i`
+of the matrix representation:
+
+```jldoctest matrixrep
+julia> apply(Op(PAULI_X, 2), 1, bi2)  # X₂|00⟩ = |01⟩
+Dict{Int64, Int64} with 1 entry:
+  2 => 1
+
+```
+
+A superposition of basis states can be passed the same way, as a `Dict`:
+
+```jldoctest matrixrep
+julia> sort(collect(apply(Op(PAULI_X, 1), Dict(1 => 1.0, 2 => 0.5), bi2)))
+2-element Vector{Pair{Int64, Float64}}:
+ 3 => 1.0
+ 4 => 0.5
+
+```
+
+### Compiled kernels
+
+When the same operator is applied many times — the inner loop of an iterative eigensolver,
+say — [`compile_apply`](@ref) pays the cost of specializing a kernel to it once, up front:
+
+```jldoctest matrixrep
+julia> Hsmall = Op(PAULI_X, 1) + Op(PAULI_Z, 2);
+
+julia> c = compile_apply(Hsmall, bi2);  # allocating:  w = c(v)
+
+julia> c! = compile_apply!(Hsmall, bi2);  # in-place:  c!(w, v)
+
+julia> c(v) == apply(Hsmall, v, bi2)
+true
+
+julia> out = similar(v); c!(out, v); out == c(v)
+true
+
+```
+
+Both accept a `threads` keyword, and a `max_combos` guard that refuses operators whose terms
+are too wide to unroll — for those, plain `apply`/`apply!` has no such limit.

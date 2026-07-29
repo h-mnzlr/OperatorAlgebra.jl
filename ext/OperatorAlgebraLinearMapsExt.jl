@@ -22,7 +22,10 @@ using LinearAlgebra
 using LinearMaps
 
 """
-    LinearMap(op::AbstractOp, basis; dims=nothing)
+    LinearMap(op::Op, basis; dims=nothing)
+    LinearMap(os::OpSum, basis)
+    LinearMap(oc::OpChain, basis)
+    LinearMap(op::AbstractOp)
 
 Create a matrix-free LinearMap representation of an operator.
 
@@ -32,9 +35,16 @@ linear solvers from packages like IterativeSolvers.jl or KrylovKit.jl.
 
 # Arguments
 - `op`: Operator to convert
-- `basis`: Vector of site identifiers defining the system
-- `dims`: (Optional) Vector of local dimensions for each site. If `nothing`, assumes all
-  sites have the same dimension as `op.mat`
+- `basis`: Vector of **site identifiers** defining the system -- note this is *not* the
+  `site => dim` basis description (`basis_info`) that `sparse`/`Array` take. Its order fixes
+  the tensor product ordering, with the first site the most significant factor, matching
+  `sparse`/`Array`.
+- `dims`: (Optional) Vector of local dimensions for each site. If `nothing`, *every* site is
+  assumed to have the same dimension as `op.mat`, so it has to be given for a system with
+  mixed local dimensions. Accepted by the single-`Op` method only -- the `OpSum`/`OpChain`
+  methods take no `dims`, since they build their factors' maps with the default.
+
+Omitting `basis` derives it from the operator itself via `sites(op)`.
 
 # Returns
 A `LinearMap` object that supports matrix-vector multiplication
@@ -42,27 +52,27 @@ A `LinearMap` object that supports matrix-vector multiplication
 # Examples
 ```julia
 using LinearMaps
-using IterativeSolvers
 
 # Create a LinearMap for a large system
 basis = 1:20  # 20-site system
 H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:19)
 lm = LinearMap(H, basis)
 
-# Use with iterative solvers
-# vals, vecs = eigs(lm, nev=5)  # Find lowest 5 eigenvalues
-
-# Matrix-vector multiplication
+# Matrix-vector multiplication, without ever assembling the matrix
 v = rand(2^20)
 result = lm * v
+
+# A site of differing local dimension needs `dims` spelled out
+LinearMap(Op(rand(3, 3), 2), [1, 2, 3], dims=[2, 3, 2])
 ```
 
 # Extended Methods
-- `LinearMap(op::Op, basis)`: Single operator
-- `LinearMap(os::OpSum, basis)`: Sum of operators (combines LinearMaps)
-- `LinearMap(oc::OpChain, basis)`: Product of operators (composes LinearMaps)
+- `LinearMap(op::Op, basis; dims)`: Single operator
+- `LinearMap(os::OpSum, basis)`: Sum of operators (combines LinearMaps with `+`)
+- `LinearMap(oc::OpChain, basis)`: Product of operators (composes LinearMaps with `*`)
+- `LinearMap(op::AbstractOp)`: Any operator, with the basis derived from `sites(op)`
 
-See also: [`sparse`](@ref), [`apply`](@ref), [`atsite`](@ref)
+See also: `sparse`, `apply`, `basis_info`
 """
 function LinearMaps.LinearMap(op::Op{Tid}, basis::AbstractVector{Tid}; dims=nothing) where {Tid}
     idx = findfirst(==(op.site), basis)
