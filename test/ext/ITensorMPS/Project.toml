@@ -1,0 +1,22 @@
+# Opt-in environment for the OperatorAlgebraITensorMPSExt tests.
+#
+# ITensorMPS is deliberately kept out of test/Project.toml -- it pulls in ~84 extra
+# packages and ~4 s of load time -- so the ordinary `Pkg.test()` run stays light while the
+# extension is still covered.
+#
+# Run with:
+#     julia --project=test/ext/ITensorMPS test/ext/ITensorMPS/runtests.jl
+#
+# `[sources]` requires Julia 1.11+. On older versions, replace it with an explicit
+#     Pkg.develop(path = joinpath(@__DIR__, "..", "..", ".."))
+# in runtests.jl before `Pkg.instantiate()`.
+
+[deps]
+ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OperatorAlgebra = "49087e99-997d-48ed-8945-d57b707c274b"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+OperatorAlgebra = { path = "../../.." }

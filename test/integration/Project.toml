@@ -1,0 +1,21 @@
+# Environment for the integration tests.
+#
+# These are deliberately *not* part of `Pkg.test()` or CI: they are far more extensive than
+# the unit tests and serve as documentation and end-to-end verification rather than as a
+# gate on every commit. Run them explicitly with:
+#
+#     julia --project=test/integration test/integration/runtests.jl
+#
+# `[sources]` requires Julia 1.11+. On older versions, replace it with an explicit
+#     Pkg.develop(path = joinpath(@__DIR__, "..", ".."))
+# before `Pkg.instantiate()`.
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OperatorAlgebra = "49087e99-997d-48ed-8945-d57b707c274b"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+OperatorAlgebra = { path = "../.." }

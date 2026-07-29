@@ -50,5 +50,12 @@ using OperatorAlgebra
     @info "Testing decompose()..."
     include("test_decompose.jl")
 
+    # Deliberately not run here:
+    #   test/integration/  -- extensive end-to-end/documentation tests, too slow to gate
+    #                         every commit; run with
+    #                         julia --project=test/integration test/integration/runtests.jl
+    #   test/ext/<Trigger>/ -- one environment per package extension, so `Pkg.test()` never
+    #                         pulls in a weak dependency; covered by CI's `test-ext` matrix
+
     @info "All tests completed!"
 end

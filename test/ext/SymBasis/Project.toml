@@ -1,0 +1,21 @@
+# Opt-in environment for the OperatorAlgebraSymBasisExt tests.
+#
+# Run with:
+#     julia --project=test/ext/SymBasis test/ext/SymBasis/runtests.jl
+#
+# `[sources]` requires Julia 1.11+. On older versions, replace it with an explicit
+#     Pkg.develop(path = joinpath(@__DIR__, "..", "..", ".."))
+# in runtests.jl before `Pkg.instantiate()`.
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OperatorAlgebra = "49087e99-997d-48ed-8945-d57b707c274b"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SymBasis = "0806812d-f945-4f84-939d-820504b53c51"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+SymBasis = "0.1.7"
+
+[sources]
+OperatorAlgebra = { path = "../../.." }

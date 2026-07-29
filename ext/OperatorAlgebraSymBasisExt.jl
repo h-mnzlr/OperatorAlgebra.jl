@@ -82,21 +82,33 @@ OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basi
     v
 end
 
-function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true)
+# `tol` is a *relative* tolerance on the antihermitian part, and floats the element type
+# before asking for its `eps` -- `eltype(H)` is routinely an integer type (`eps(Int64)` is a
+# MethodError), and default keyword values are evaluated on every call even when the
+# argument they guard is switched off. An absolute `eps` is also far too tight: the reduced
+# matrix accumulates over the whole symmetry orbit, so a genuinely Hermitian Hamiltonian
+# carries dust a few times `eps` *times the size of its entries*. Scaling by `norm(H)`
+# keeps the guard meaningful without flagging rounding noise -- a truly non-Hermitian
+# operator has an antihermitian part of the same order as the operator itself, so it is
+# still rejected by a wide margin.
+function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
+    Tel = complex(float(eltype(H)))
+    tol = isnothing(tol) && (tol = sqrt(eps(real(Tel))))
+
     b = Dict(ba.states .=> eachindex(ba.states))
     I_vec = Int64[]
     J_vec = Int64[]
     V_vec = ComplexF64[]
 
     for state1 in ba.states
-        applied_s = _apply_op(H, Dict(state1 => one(complex(eltype(H)))))
+        applied_s = _apply_op(H, Dict(state1 => one(Tel)))
 
         repr_states = empty(applied_s)
         for (s, v) in applied_s
             repr_s, repr_f = representative(s, ba)
             repr_s ∉ keys(b) &&  continue
 
-            vo = get(repr_states, repr_s, zero(complex(eltype(H))))
+            vo = get(repr_states, repr_s, zero(Tel))
             repr_states[repr_s] = v * repr_f + vo
         end
 
@@ -115,7 +127,12 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true)
     # otherwise shrink the matrix below the dimension of the basis
     dim = length(ba.states)
     H = sparse(I_vec, J_vec, V_vec, dim, dim)
-    check_hermitian && !ishermitian(H) && throw(ArgumentError("Hamiltonian is not Hermitean: Antihermitean part has norm $(norm(H-H')/2)"))
+    if check_hermitian
+        anti = norm((H - H')/2)
+        anti > tol * max(one(anti), norm(H)) && throw(
+            ArgumentError("Hamiltonian is not Hermitian: Antihermitian part has norm $(anti / 2)")
+        )
+    end
 
     H
 end
