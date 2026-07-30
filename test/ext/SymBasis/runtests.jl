@@ -243,6 +243,84 @@ const RAISEM = [0 0; 1 0]
         end
     end
 
+    # --- fermionic operators --------------------------------------------------------------
+    # `fermion`-tagged sites are resolved by `OperatorAlgebra._jw_expand` before `_apply_op`
+    # ever sees them (see the extension source), so the ground truth here is built completely
+    # independently of that machinery: `fullmat_fermion_op` implements the textbook
+    # single-sided Jordan-Wigner rule by direct bit manipulation on the full 2^N-dimensional
+    # space (digit `k`, 1-based, is bit `k-1` of the state's integer value -- matching
+    # `SymBasis.DigitBase.read`/`write` -- and `c_k` picks up a sign from the parity of
+    # occupied digits *below* `k`). A bug shared between this and the extension's own
+    # `_jw_expand`-based resolution would have to reproduce that same sign convention by
+    # accident, which is exactly what keeping the two independent guards against.
+
+    RAISEF = ComplexF64[0 0; 1 0]
+    LOWERF = ComplexF64[0 1; 0 0]
+
+    function fullmat_fermion_op(mat, k, N)
+        dim = 2^N
+        M = zeros(ComplexF64, dim, dim)
+        for v in 0:dim-1
+            dk = (v >> (k - 1)) & 1
+            for dk_new in 0:1
+                iszero(mat[dk_new+1, dk+1]) && continue
+                below_mask = (1 << (k - 1)) - 1
+                sign = iseven(count_ones(v & below_mask)) ? 1 : -1
+                vnew = v - (dk << (k - 1)) + (dk_new << (k - 1))
+                M[vnew+1, v+1] += mat[dk_new+1, dk+1] * sign
+            end
+        end
+        M
+    end
+
+    function fullmat_hopping(N)
+        M = zeros(ComplexF64, 2^N, 2^N)
+        for k in 1:N-1
+            M .+= fullmat_fermion_op(RAISEF, k, N) * fullmat_fermion_op(LOWERF, k + 1, N)
+            M .+= fullmat_fermion_op(RAISEF, k + 1, N) * fullmat_fermion_op(LOWERF, k, N)
+        end
+        # a longer-range term too, so a chain factor skips an intermediate site that only
+        # ever appears (fermionically) in the other, nearest-neighbor terms of `H`
+        M .+= fullmat_fermion_op(RAISEF, 1, N) * fullmat_fermion_op(LOWERF, N, N)
+        M .+= fullmat_fermion_op(RAISEF, N, N) * fullmat_fermion_op(LOWERF, 1, N)
+        M
+    end
+
+    @testset "fermionic operators" begin
+        N = 4
+        dofo = dof_object(SpinlessFermion())
+        cdag(k) = fermion(Op(RAISEF, k))
+        c(k) = fermion(Op(LOWERF, k))
+        H = sum(cdag(k) * c(k + 1) + cdag(k + 1) * c(k) for k in 1:N-1) +
+            cdag(1) * c(N) + cdag(N) * c(1)
+        Href = fullmat_hopping(N)
+
+        @testset "particle-number symmetry sectors reassemble the full spectrum" begin
+            for n_particles in 0:N
+                sg = sym(TotalSpinlessFermionicNumber(n_particles, N), dofo)
+                ba = basis(dofo, N, sg)
+                isempty(ba.states) && continue
+
+                # The symmetry group is trivial (one cycle, unit factor), so each sector is
+                # just a 0/1 selection of the full-space basis vectors with that occupation.
+                idx = [Int(s.value) + 1 for s in ba.states]
+                V = zeros(ComplexF64, 2^N, length(ba.states))
+                for (a, i) in enumerate(idx)
+                    V[i, a] = 1.0
+                end
+
+                Hred = Matrix(sparse(H, ba))
+                @test Hred ≈ V' * Href * V atol = 1e-9
+                @test Hred ≈ Hred' atol = 1e-10
+
+                v = ComplexF64[cis(0.3i) * (1 + i) for i in 1:length(ba.states)]
+                w = copy(v)
+                OperatorAlgebra.apply!(H, w, ba)
+                @test w ≈ Hred * v atol = 1e-9
+            end
+        end
+    end
+
     # --- regressions ---------------------------------------------------------------------
     # Both of these were real defects, found by these tests and since fixed. They only ever
     # show up when a symmetry phase is *not* a Gaussian integer: at N = 4 every translational

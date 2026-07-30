@@ -10,7 +10,7 @@ using LinearAlgebra
 using SparseArrays
 
 function _apply_op(o::Op, states)
-    idx = o.site
+    idx = OperatorAlgebra.rawsite(o.site)
     ldim = size(o.mat, 1)
 
     nstates = empty(states)
@@ -63,10 +63,12 @@ OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basi
     b = Dict(ba.states .=> eachindex(ba.states))
     vout = complex(zero(v))
 
+    flat = OperatorAlgebra._jw_expand(H, basis_info(H))
+
     for (n, val) in enumerate(v)
         iszero(val) && continue
         s = ba.states[n]
-        applied_s = _apply_op(H, Dict(s => val))
+        applied_s = _apply_op(flat, Dict(s => val))
         for (s2, v2) in applied_s
             repr_s, repr_f = representative(s2, ba)
             repr_s ∉ keys(b) &&  continue 
@@ -82,17 +84,9 @@ OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basi
     v
 end
 
-# `tol` is a *relative* tolerance on the antihermitian part, and floats the element type
-# before asking for its `eps` -- `eltype(H)` is routinely an integer type (`eps(Int64)` is a
-# MethodError), and default keyword values are evaluated on every call even when the
-# argument they guard is switched off. An absolute `eps` is also far too tight: the reduced
-# matrix accumulates over the whole symmetry orbit, so a genuinely Hermitian Hamiltonian
-# carries dust a few times `eps` *times the size of its entries*. Scaling by `norm(H)`
-# keeps the guard meaningful without flagging rounding noise -- a truly non-Hermitian
-# operator has an antihermitian part of the same order as the operator itself, so it is
-# still rejected by a wide margin.
 function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
-    Tel = complex(float(eltype(H)))
+    flat = OperatorAlgebra._jw_expand(H, basis_info(H))
+    Tel = complex(float(eltype(flat)))
     tol = isnothing(tol) && (tol = sqrt(eps(real(Tel))))
 
     b = Dict(ba.states .=> eachindex(ba.states))
@@ -101,7 +95,7 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
     V_vec = ComplexF64[]
 
     for state1 in ba.states
-        applied_s = _apply_op(H, Dict(state1 => one(Tel)))
+        applied_s = _apply_op(flat, Dict(state1 => one(Tel)))
 
         repr_states = empty(applied_s)
         for (s, v) in applied_s
