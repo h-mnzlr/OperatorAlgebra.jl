@@ -73,14 +73,14 @@ LinearMap(Op(rand(3, 3), 2), [1, 2, 3], dims=[2, 3, 2])
 
 See also: `sparse`, `apply`, `basis_info`
 """
-function LinearMaps.LinearMap(op::Op{Tid}, basis::AbstractVector{Tid}; dims=nothing) where {Tid}
+function LinearMaps.LinearMap(op::Op{Tid}, basis::AbstractVector{Tid}; dims::Union{Nothing,AbstractVector{<:Integer}}=nothing) where {Tid}
     idx = findfirst(==(op.site), basis)
     isnothing(idx) && throw(ArgumentError("Site $(op.site) not found in basis"))
-    
+
     L = length(basis)
     mat_size = size(op.mat, 1)
-    isnothing(dims) && (dims = fill(mat_size, L))
-    
+    dims = something(dims, fill(mat_size, L))
+
     dim_left = prod(dims[1:idx - 1])
     dim_right = prod(dims[(idx + 1):end])
 

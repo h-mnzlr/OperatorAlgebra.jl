@@ -87,7 +87,7 @@ end
 function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
     flat = OperatorAlgebra._jw_expand(H, basis_info(H))
     Tel = complex(float(eltype(flat)))
-    tol = isnothing(tol) && (tol = sqrt(eps(real(Tel))))
+    tol = isnothing(tol) ? sqrt(eps(real(Tel))) : tol
 
     b = Dict(ba.states .=> eachindex(ba.states))
     I_vec = Int64[]
