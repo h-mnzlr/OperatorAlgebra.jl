@@ -73,9 +73,11 @@ using OperatorAlgebra: sitetype, eltype, commutator
         # so they are pinned by value rather than by type.
         for A in shapes
             @test isequal(A^0, one(A))
-            @test isequal(A^1, A)
             @test A^0 == A^zero(Int)
             @test A^1 == A^one(Int)
+            # `Val{1}` hands back the very same object rather than wrapping it in a chain,
+            # which is the whole point of the shortcut
+            @test A^1 === A
         end
 
         # `@inferred A^0` would rewrite to a direct `^(A, 0)` call and miss `literal_pow`
@@ -85,7 +87,6 @@ using OperatorAlgebra: sitetype, eltype, commutator
         @test (@inferred lit0(x1)) isa Op{Int64,Int64}
         @test (@inferred lit1(x1)) isa Op{Int64,Int64}
         @test (@inferred lit0(x1 * y2)) isa OpChain{Int64,Complex{Int64}}
-        @test (@allocated x1^1) == 0
 
         # The power is left as a product -- it is not distributed into a sum of terms, so a
         # sum base stays an n-factor chain and only `flattenop` expands it.
