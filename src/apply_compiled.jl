@@ -9,19 +9,6 @@
 # already been multiplied out symbolically. No `eval` is involved, so there are no
 # world-age issues: the kernel is compiled lazily by dispatch on first call.
 
-# Flatten an operator into a sum of products of single-site Ops, preserving chain order.
-# OpSum factors nested inside chains are distributed multiplicatively.
-_expand_terms(o::Op) = [[o]]
-_expand_terms(os::OpSum) =
-    reduce(vcat, (_expand_terms(o) for o in os.ops); init=Vector{Vector{Op}}())
-_expand_terms(oc::OpChain) = begin
-    terms = [Op[]]
-    for f in oc.ops
-        terms = [vcat(t, ft) for t in terms for ft in _expand_terms(f)]
-    end
-    terms
-end
-
 # One term as a codegen spec: merge same-site factors by multiplying their matrices in
 # chain order (factors on distinct sites commute -- tagged sites have already had their
 # strings made explicit by `_jw_expand`, so grouping is sound here), then sort by stride
@@ -73,8 +60,11 @@ _term_spec(term::Vector{<:Op}, bi, max_combos) = begin
     Tuple(factors)
 end
 
+# `_terms` flattens the operator into a sum of products of single-site Ops, preserving chain
+# order and distributing OpSum factors nested inside chains; `Op` keeps the term lists
+# concretely typed for `_term_spec`.
 _apply_spec(op::AbstractOp, bi, max_combos) =
-    (_total_dim(bi), Tuple(_term_spec(t, bi, max_combos) for t in _expand_terms(op)))
+    (_total_dim(bi), Tuple(_term_spec(t, bi, max_combos) for t in _terms(op, Op)))
 
 # --- expression generation from a spec --------------------------------------------------
 #

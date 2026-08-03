@@ -68,6 +68,20 @@ end
     @testset "one and zero constructors" begin
         @test isone(one(chain))
         @test iszero(zero(chain))
+
+        # both follow the chain's own (promoted) element type, not Bool
+        @test eltype(one(chain)) == eltype(chain)
+        @test eltype(zero(chain)) == eltype(chain)
+
+        mixed = OpChain(Op(PAULI_X, 1), Op(ComplexF64[1 0; 0 1], 2))
+        @test eltype(mixed) == ComplexF64
+        @test eltype(one(mixed)) == ComplexF64
+        @test eltype(zero(mixed)) == ComplexF64
+
+        # the parameters are named in the signature, so the result type is inferable
+        @test (@inferred one(chain)) isa OpChain{Int64,Int64}
+        @test (@inferred zero(chain)) isa OpChain{Int64,Int64}
+        @test (@inferred one(mixed)) isa OpChain{Int64,ComplexF64}
     end
 
     @testset "iszero: any zero factor annihilates the product" begin

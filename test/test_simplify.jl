@@ -1,8 +1,22 @@
 using Test
 using SparseArrays
-using OperatorAlgebra: atsite  # not exported
+using OperatorAlgebra: atsite, _terms  # not exported
 
 @info "Testing simplify()..."
+
+@testset "flattenop() distribution" begin
+    A, B, C = Op([1 0; 0 2], 1), Op([0 1; 1 0], 2), Op([2 0; 0 3], 3)
+
+    # Sums are distributed at every nesting depth, and factor order within each term is
+    # preserved -- both are required for non-commuting factors.
+    @test isequal(flattenop(OpChain(OpSum(A, B), C)), OpSum(OpChain(A, C), OpChain(B, C)))
+    @test isequal(flattenop(OpChain(OpSum(OpChain(A, B), C), OpSum(B, C))),
+        OpSum(OpChain(A, B, B), OpChain(A, B, C), OpChain(C, B), OpChain(C, C)))
+    @test isempty(flattenop(OpChain(A, OpSum(AbstractOp[]), B)).ops)
+
+    # A long chain is a single term, built in one pass rather than by recopying a prefix.
+    @test length(only(_terms(OpChain(AbstractOp[isodd(i) ? A : B for i in 1:20_000])))) == 20_000
+end
 
 @testset "simplify() Tests" begin
     @testset "Op simplified is Op" begin

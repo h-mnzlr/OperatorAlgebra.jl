@@ -619,13 +619,45 @@ See also: [`simplify`](@ref), [`Op`](@ref), [`OpChain`](@ref), [`OpSum`](@ref)
 """
 flattenop(op::AbstractOp) = OpSum(AbstractOp[_chain_rest(t) for t in _terms(op)])
 
-# factor lists of the expanded chains, one entry per term of the resulting sum
-_terms(o::Op) = [AbstractOp[o]]
-_terms(os::OpSum) =
-    isempty(os.ops) ? Vector{AbstractOp}[] : reduce(vcat, _terms(o) for o in os.ops)
-_terms(oc::OpChain) = begin
-    isempty(oc.ops) && return [AbstractOp[]]
-    reduce(_terms(o) for o in oc.ops) do left, right
-        [vcat(l, r) for l in left for r in right]
+# Factor lists of the expanded chains, one entry per term of the resulting sum. The factors
+# are always single-site `Op`s; `T` picks the element type the lists are stored in, so a
+# caller that wants concretely typed terms (`compile_apply`) asks for `Op` while `flattenop`
+# keeps `AbstractOp`, which is what `OpChain` holds anyway.
+_terms(o::Op, ::Type{T}=AbstractOp) where {T<:AbstractOp} = [T[o]]
+_terms(os::OpSum, ::Type{T}=AbstractOp) where {T<:AbstractOp} = begin
+    out = Vector{T}[]
+    for o in os.ops
+        append!(out, _terms(o, T))
     end
+    out
+end
+
+# The terms are the cartesian product of the factors' terms, last factor varying fastest.
+# Folding `vcat` over the factors would recopy the growing prefix once per factor, so each
+# term is sized up front and filled in one pass: linear in the chain length, not quadratic.
+_terms(oc::OpChain, ::Type{T}=AbstractOp) where {T<:AbstractOp} = begin
+    isempty(oc.ops) && return [T[]]
+    expanded = [_terms(o, T) for o in oc.ops]
+    counts = length.(expanded)
+    out = Vector{Vector{T}}(undef, prod(counts))
+    isempty(out) && return out
+
+    picked = ones(Int, length(expanded))
+    for n in eachindex(out)
+        width = sum(length(expanded[i][picked[i]]) for i in eachindex(expanded))
+        term = Vector{T}(undef, width)
+        at = 1
+        for i in eachindex(expanded)
+            factor = expanded[i][picked[i]]
+            copyto!(term, at, factor)
+            at += length(factor)
+        end
+        out[n] = term
+
+        for i in reverse(eachindex(picked))
+            picked[i] < counts[i] && (picked[i] += 1; break)
+            picked[i] = 1
+        end
+    end
+    out
 end

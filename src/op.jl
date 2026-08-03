@@ -49,8 +49,10 @@ Base.:*(A::Op, s::Number) = Op(A.mat * s, A.site)
 Base.:*(s::Number, A::Op) = A * s
 Base.adjoint(A::Op) = Op(adjoint(A.mat), A.site)
 
-Base.one(op::Op) = Op(LinearAlgebra.I(size(op.mat, 1)), op.site)
-Base.zero(op::Op) = Op(zero(op.mat), op.site)
+# naming the parameters pins the return type: `mat` is an `AbstractMatrix{Tmat}` field, so
+# inference cannot recover them from `one(op.mat)`/`zero(op.mat)` alone
+Base.one(op::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,Tmat}(one(op.mat), op.site)
+Base.zero(op::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,Tmat}(zero(op.mat), op.site)
 Base.iszero(A::Op) = iszero(A.mat)
 Base.isone(A::Op) = isone(A.mat)
 

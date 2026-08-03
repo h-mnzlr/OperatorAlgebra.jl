@@ -81,8 +81,8 @@ Base.:*(A::OpSum, s::Number) = OpSum(AbstractOp[op * s for op in A.ops])
 
 Base.adjoint(os::OpSum) = OpSum(AbstractOp[adjoint(op) for op in os.ops])
 
-Base.one(os::OpSum) = OpSum(one(first(os.ops)))
-Base.zero(os::OpSum) = OpSum(zero(first(os.ops)))
+Base.one(os::OpSum{Tid,Tmat}) where {Tid,Tmat} = OpSum{Tid,Tmat}([one(first(os.ops))])
+Base.zero(os::OpSum{Tid,Tmat}) where {Tid,Tmat} = OpSum{Tid,Tmat}([zero(first(os.ops))])
 Base.iszero(os::OpSum) = isempty(os.ops) ? true : all(iszero(op) for op in os.ops)
 Base.isone(os::OpSum) = length(os.ops) == 1 && isone(only(os.ops))
 

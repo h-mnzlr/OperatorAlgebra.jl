@@ -75,6 +75,21 @@ end
         @test op_one.mat == I(2)
         @test op_one.site == op.site
         @test size(op_one.mat) == size(op.mat)
+
+        # `one` follows the operator's element type. Building it from `I(n)`, which is
+        # Bool-valued, silently narrowed every identity to `Op{Tid,Bool}`.
+        @test eltype(op_one) == eltype(op)
+        @test eltype(one(Op([1.0 0.0; 0.0 1.0], 1))) == Float64
+        @test eltype(one(Op(ComplexF64[0 1; 1 0], 1))) == ComplexF64
+
+        # it also inherits the matrix representation, so a sparse Op stays sparse
+        @test issparse(one(Op(sparse([1 0; 0 1]), 1)).mat)
+        @test_throws Exception one(Op(rand(2, 3), 1))
+
+        # `mat` is declared as `AbstractMatrix{Tmat}`, so inference cannot recover the
+        # parameters from `one(op.mat)`; the signature names them to pin the result type
+        @test (@inferred one(op)) isa Op{Int64,Int64}
+        @test (@inferred one(Op([1.0 0.0; 0.0 1.0], 1))) isa Op{Int64,Float64}
     end
 
     @testset "zero method" begin
@@ -82,6 +97,13 @@ end
         @test op_zero.mat == zeros(2, 2)
         @test op_zero.site == op.site
         @test size(op_zero.mat) == size(op.mat)
+
+        @test eltype(op_zero) == eltype(op)
+        @test eltype(zero(Op([1.0 0.0; 0.0 1.0], 1))) == Float64
+        @test eltype(zero(Op(ComplexF64[0 1; 1 0], 1))) == ComplexF64
+
+        @test (@inferred zero(op)) isa Op{Int64,Int64}
+        @test (@inferred zero(Op([1.0 0.0; 0.0 1.0], 1))) isa Op{Int64,Float64}
     end
 
     @testset "iszero and isone predicates" begin

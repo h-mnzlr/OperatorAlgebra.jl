@@ -79,10 +79,14 @@ Base.:*(s::Number, oc::OpChain) = begin
 end
 Base.:*(oc::OpChain, s::Number) = s * oc
 
+# repeating the factors rather than the chain itself keeps the product flat, so `flattenop`
+# expands each factor once instead of re-expanding `oc` for every copy
+_repeated(oc::OpChain, n::Integer) = OpChain{sitetype(oc),eltype(oc)}(repeat(oc.ops, n))
+
 Base.adjoint(oc::OpChain) = OpChain(AbstractOp[adjoint(op) for op in reverse(oc.ops)])
 
-Base.one(oc::OpChain) = OpChain(one(first(oc.ops)))
-Base.zero(oc::OpChain) = OpChain(zero(first(oc.ops)))
+Base.one(oc::OpChain{Tid,Tmat}) where {Tid,Tmat} = OpChain{Tid,Tmat}([one(first(oc.ops))])
+Base.zero(oc::OpChain{Tid,Tmat}) where {Tid,Tmat} = OpChain{Tid,Tmat}([zero(first(oc.ops))])
 Base.iszero(oc::OpChain) = any(iszero(op) for op in oc.ops)
 Base.isone(oc::OpChain) = all(isone(op) for op in oc.ops)
 

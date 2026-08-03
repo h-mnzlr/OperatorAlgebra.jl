@@ -1,4 +1,5 @@
 using Test
+using LinearAlgebra: I
 using OperatorAlgebra: sitetype, eltype, commutator
 
 @info "Testing AbstractOp edge cases..."
@@ -37,6 +38,72 @@ using OperatorAlgebra: sitetype, eltype, commutator
         @test *(a) == MockOp(3.0)
         @test a / 2 == MockOp(1.5)
         @test a - b == MockOp(1.5)
+    end
+
+    @testset "Integer powers" begin
+        x1, y2, z3 = Op(PAULI_X, 1), Op(PAULI_Y, 2), Op(PAULI_Z, 3)
+        bi = basis_info(x1 * y2 * z3)
+        repeated(A, n) = foldl(*, fill(A, n))
+        shapes = (x1, x1 * y2, x1 + y2, x1 + y2 * z3, (x1 + y2) * z3, 2.0x1 + z3)
+
+        # Has to agree with the naive product for both odd and even exponents, and for
+        # operators that are chains, sums, and mixtures of the two.
+        for A in shapes
+            for n in 1:6
+                @test Array(A^n, bi) ≈ Array(repeated(A, n), bi)
+            end
+            @test A^1 == A
+            @test Array(A^0, bi) ≈ I(8)
+            @test isone(A^0)
+        end
+
+        # With a runtime exponent the result type follows the argument type alone, never
+        # the value of `n`, so `A^0` is a chain wrapping the identity rather than a bare
+        # `one(A)` -- that is what keeps `^` inferable.
+        for A in shapes
+            # `zero(Int)`/loop variables are not literals, so these take the runtime method
+            @test allequal(typeof(A^k) for k in 0:5)
+            @test A^zero(Int) isa OpChain{OperatorAlgebra.sitetype(A),eltype(A)}
+            @test (@inferred A^3) isa OpChain
+        end
+
+        # A *literal* exponent is a separate, compile-time dispatch, so `Val{0}`/`Val{1}`
+        # can skip building a chain entirely without costing inferability. These shortcuts
+        # deliberately return a different (cheaper) representation than the runtime path,
+        # so they are pinned by value rather than by type.
+        for A in shapes
+            @test isequal(A^0, one(A))
+            @test isequal(A^1, A)
+            @test A^0 == A^zero(Int)
+            @test A^1 == A^one(Int)
+        end
+
+        # `@inferred A^0` would rewrite to a direct `^(A, 0)` call and miss `literal_pow`
+        # entirely, so the literal path has to be reached through a function.
+        lit0(A) = A^0
+        lit1(A) = A^1
+        @test (@inferred lit0(x1)) isa Op{Int64,Int64}
+        @test (@inferred lit1(x1)) isa Op{Int64,Int64}
+        @test (@inferred lit0(x1 * y2)) isa OpChain{Int64,Complex{Int64}}
+        @test (@allocated x1^1) == 0
+
+        # The power is left as a product -- it is not distributed into a sum of terms, so a
+        # sum base stays an n-factor chain and only `flattenop` expands it.
+        p = (x1 + y2)^3
+        @test p isa OpChain
+        @test length(p.ops) == 3
+        @test length(flattenop(p).ops) == 8
+        # a chain base is repeated factor-wise, so the product stays flat
+        @test length(((x1 * y2)^5).ops) == 10
+        @test all(f -> f isa Op, ((x1 * y2)^5).ops)
+
+        # Operators have no general inverse, so negative exponents are rejected rather
+        # than routed to `inv` by Base's literal-power rewrite.
+        n = -1
+        @test_throws DomainError x1^n
+        @test_throws DomainError x1^-1
+        @test_throws DomainError x1^-2
+        @test_throws DomainError (x1 * y2)^-3
     end
 
     @testset "Accuracy tests" begin

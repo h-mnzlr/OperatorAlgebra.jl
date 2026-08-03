@@ -76,6 +76,20 @@ end
         os = OpSum(A, B)
         @test isone(one(os))
         @test iszero(zero(os))
+
+        # both follow the sum's own (promoted) element type, not Bool
+        @test eltype(one(os)) == eltype(os)
+        @test eltype(zero(os)) == eltype(os)
+
+        mixed = OpSum(Op(PAULI_X, 1), Op(ComplexF64[1 0; 0 1], 2))
+        @test eltype(mixed) == ComplexF64
+        @test eltype(one(mixed)) == ComplexF64
+        @test eltype(zero(mixed)) == ComplexF64
+
+        # the parameters are named in the signature, so the result type is inferable
+        @test (@inferred one(os)) isa OpSum{Int64,Int64}
+        @test (@inferred zero(os)) isa OpSum{Int64,Int64}
+        @test (@inferred one(mixed)) isa OpSum{Int64,ComplexF64}
     end
 
     @testset "iszero" begin
