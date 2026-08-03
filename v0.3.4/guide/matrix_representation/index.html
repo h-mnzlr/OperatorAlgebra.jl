@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Matrix Representations · OperatorAlgebra.jl</title><meta name="title" content="Matrix Representations · OperatorAlgebra.jl"/><meta property="og:title" content="Matrix Representations · OperatorAlgebra.jl"/><meta property="twitter:title" content="Matrix Representations · OperatorAlgebra.jl"/><meta name="description" content="Documentation for OperatorAlgebra.jl."/><meta property="og:description" content="Documentation for OperatorAlgebra.jl."/><meta property="twitter:description" content="Documentation for OperatorAlgebra.jl."/><meta property="og:url" content="https://h-mnzlr.github.io/OperatorAlgebra.jl/guide/matrix_representation/"/><meta property="twitter:url" content="https://h-mnzlr.github.io/OperatorAlgebra.jl/guide/matrix_representation/"/><link rel="canonical" href="https://h-mnzlr.github.io/OperatorAlgebra.jl/guide/matrix_representation/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">OperatorAlgebra.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../getting_started/">Getting Started</a></li><li><a class="tocitem" href="../operators/">Operator Types</a></li><li class="is-active"><a class="tocitem" href>Matrix Representations</a><ul class="internal"><li><a class="tocitem" href="#The-basis-description"><span>The basis description</span></a></li><li><a class="tocitem" href="#Matrix-Representations"><span>Matrix Representations</span></a></li><li><a class="tocitem" href="#Applying-Operators-Without-Building-a-Matrix"><span>Applying Operators Without Building a Matrix</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../../examples/">Examples</a></li><li><span class="tocitem">Extensions</span><ul><li><a class="tocitem" href="../../extensions/">Overview</a></li><li><a class="tocitem" href="../../extensions/linearmaps/">LinearMaps</a></li><li><a class="tocitem" href="../../extensions/itensormps/">ITensorMPS</a></li><li><a class="tocitem" href="../../extensions/latexify/">Latexify</a></li><li><a class="tocitem" href="../../extensions/symbasis/">SymBasis</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/types/">Types</a></li><li><a class="tocitem" href="../../api/operations/">Operations</a></li><li><a class="tocitem" href="../../api/sites/">Custom Sites</a></li><li><a class="tocitem" href="../../api/constants/">Constants</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">User Guide</a></li><li class="is-active"><a href>Matrix Representations</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Matrix Representations</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/h-mnzlr/OperatorAlgebra.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/h-mnzlr/OperatorAlgebra.jl/blob/main/docs/src/guide/matrix_representation.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Matrix-Representation-of-Operators"><a class="docs-heading-anchor" href="#Matrix-Representation-of-Operators">Matrix Representation of Operators</a><a id="Matrix-Representation-of-Operators-1"></a><a class="docs-heading-anchor-permalink" href="#Matrix-Representation-of-Operators" title="Permalink"></a></h1><p>The main goal of this package is to create and manipulate operators algebraically before converting them to matrix representations. Once you do want a matrix, OperatorAlgebra.jl builds it over the full tensor product space for you, inserting the identities on every site the operator does not touch. Depending on the system size and computational needs, different matrix representations should be chosen.</p><h2 id="The-basis-description"><a class="docs-heading-anchor" href="#The-basis-description">The basis description</a><a id="The-basis-description-1"></a><a class="docs-heading-anchor-permalink" href="#The-basis-description" title="Permalink"></a></h2><p>All matrix conversions take a <em>basis description</em> <code>bi</code>: a vector of <code>site =&gt; dim</code> pairs giving each site&#39;s local Hilbert space dimension. The dimensions are needed to build the identities inserted at the untouched sites, and the order of the pairs fixes the tensor product ordering, with the first site as the most significant (leftmost) factor.</p><pre><code class="language-julia-repl hljs">julia&gt; bi = [1 =&gt; 2, 2 =&gt; 2, 3 =&gt; 2];  # a 3-site system: three 2-dimensional sites
+
+julia&gt; σx = Op(PAULI_X, 2);  # Pauli X on site 2
+
+julia&gt; σx_full = Array(σx, bi);  # extended to the full space: I ⊗ σx ⊗ I
+
+julia&gt; size(σx_full)
+(8, 8)
+</code></pre><h3 id="Deriving-the-basis-automatically"><a class="docs-heading-anchor" href="#Deriving-the-basis-automatically">Deriving the basis automatically</a><a id="Deriving-the-basis-automatically-1"></a><a class="docs-heading-anchor-permalink" href="#Deriving-the-basis-automatically" title="Permalink"></a></h3><p>Leaving <code>bi</code> out derives it from the operator itself with <a href="../../api/operations/#OperatorAlgebra.basis_info"><code>basis_info</code></a>, which collects each site&#39;s dimension (and checks they are consistent):</p><pre><code class="language-julia-repl hljs">julia&gt; H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:7);
+
+julia&gt; basis_info(H)
+8-element Vector{Pair{Int64, Int64}}:
+ 1 =&gt; 2
+ 2 =&gt; 2
+ 3 =&gt; 2
+ 4 =&gt; 2
+ 5 =&gt; 2
+ 6 =&gt; 2
+ 7 =&gt; 2
+ 8 =&gt; 2
+
+julia&gt; Array(H) == Array(H, basis_info(H))
+true
+</code></pre><p>Pass <code>bi</code> explicitly whenever the operator does not mention every site of your system — a term that happens to act only on sites 1 and 2 would otherwise silently produce a matrix over just those two sites.</p><h3 id="Variable-Dimensions"><a class="docs-heading-anchor" href="#Variable-Dimensions">Variable Dimensions</a><a id="Variable-Dimensions-1"></a><a class="docs-heading-anchor-permalink" href="#Variable-Dimensions" title="Permalink"></a></h3><p>Since <code>bi</code> carries each site&#39;s dimension individually, sites with different local dimensions need nothing beyond their own <code>dim</code> in the pairs:</p><pre><code class="language-julia-repl hljs">julia&gt; bi_mixed = [1 =&gt; 2, 2 =&gt; 3, 3 =&gt; 2];  # site 2 has local dimension 3
+
+julia&gt; op_3x3 = Op(rand(3, 3), 2);  # a 3×3 operator on site 2
+
+julia&gt; size(Array(op_3x3, bi_mixed))  # 2 × 3 × 2
+(12, 12)
+</code></pre><h2 id="Matrix-Representations"><a class="docs-heading-anchor" href="#Matrix-Representations">Matrix Representations</a><a id="Matrix-Representations-1"></a><a class="docs-heading-anchor-permalink" href="#Matrix-Representations" title="Permalink"></a></h2><h3 id="Dense-Matrices"><a class="docs-heading-anchor" href="#Dense-Matrices">Dense Matrices</a><a id="Dense-Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Dense-Matrices" title="Permalink"></a></h3><p><code>Array</code> produces a dense matrix, keeping the element type that results from the operator&#39;s own matrices. <code>Matrix{T}</code> converts to a specific element type in the process.</p><pre><code class="language-julia-repl hljs">julia&gt; bi8 = (1:8) .=&gt; 2;  # 8 sites, each of dimension 2
+
+julia&gt; σx_matrix = Array(Op(PAULI_X, 4), bi8);  # single operator
+
+julia&gt; H_matrix = Array(H, bi8);  # Hamiltonian
+
+julia&gt; H_matrix == Array(H)  # or let basis_info derive the basis from H itself
+true
+
+julia&gt; eltype(Matrix{ComplexF64}(H, bi8))  # fixing the element type
+ComplexF64 (alias for Complex{Float64})
+</code></pre><p>Note that <code>Matrix</code> needs its element type: <code>Matrix{ComplexF64}(H)</code> works, plain <code>Matrix(H)</code> is not defined — use <code>Array(H)</code> for the dense form that keeps the natural element type.</p><h3 id="Sparse-Matrices"><a class="docs-heading-anchor" href="#Sparse-Matrices">Sparse Matrices</a><a id="Sparse-Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-Matrices" title="Permalink"></a></h3><pre><code class="language-julia-repl hljs">julia&gt; using SparseArrays
+
+julia&gt; bi12 = (1:12) .=&gt; 2;
+
+julia&gt; Hbig = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:11);
+
+julia&gt; sparse(Hbig, bi12) == sparse(Hbig)  # `bi` may be omitted, via basis_info(Hbig)
+true
+</code></pre><h3 id="LinearMaps"><a class="docs-heading-anchor" href="#LinearMaps">LinearMaps</a><a id="LinearMaps-1"></a><a class="docs-heading-anchor-permalink" href="#LinearMaps" title="Permalink"></a></h3><pre><code class="language-julia hljs">using LinearMaps
+basis = 1:20  # 2^20 ≈ 1 million dimensional space
+
+H = sum(Op(PAULI_X, i) * Op(PAULI_X, i+1) for i in 1:19)
+H_lm = LinearMap(H, basis)
+
+# Matrix-vector multiplication
+v = normalize!(rand(2^20))
+result = H_lm * v</code></pre><h2 id="Applying-Operators-Without-Building-a-Matrix"><a class="docs-heading-anchor" href="#Applying-Operators-Without-Building-a-Matrix">Applying Operators Without Building a Matrix</a><a id="Applying-Operators-Without-Building-a-Matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Applying-Operators-Without-Building-a-Matrix" title="Permalink"></a></h2><p>For large systems it is often wasteful to materialize the matrix at all: if you only ever need <code>H * v</code>, <a href="../../api/operations/#OperatorAlgebra.apply"><code>apply</code></a> computes it directly from the operator&#39;s algebraic structure. States are ordinary dense vectors over the <strong>full</strong> Hilbert space described by <code>bi</code>, using the same index ordering as the matrix representations (first site of <code>bi</code> most significant), so <code>length(v)</code> must equal <code>prod(last, bi)</code>.</p><h3 id="Applying-to-a-state-vector"><a class="docs-heading-anchor" href="#Applying-to-a-state-vector">Applying to a state vector</a><a id="Applying-to-a-state-vector-1"></a><a class="docs-heading-anchor-permalink" href="#Applying-to-a-state-vector" title="Permalink"></a></h3><pre><code class="language-julia-repl hljs">julia&gt; bi2 = [1 =&gt; 2, 2 =&gt; 2];
+
+julia&gt; v = [1.0, 0.0, 0.0, 0.0];  # |00⟩
+
+julia&gt; apply(Op(PAULI_X, 2), v, bi2)  # |01⟩; same as `sparse(op, bi2) * v`
+4-element Vector{Float64}:
+ 0.0
+ 1.0
+ 0.0
+ 0.0
+
+julia&gt; out = similar(v);  # in-place: `out` must not alias `v`
+
+julia&gt; apply!(out, Op(PAULI_X, 1), v, bi2)
+4-element Vector{Float64}:
+ 0.0
+ 0.0
+ 1.0
+ 0.0
+
+julia&gt; apply(Op(PAULI_X, 1), [1.0, 0.0])  # `bi` may be omitted, via basis_info
+2-element Vector{Float64}:
+ 0.0
+ 1.0
+</code></pre><p>This works for every operator type. An <code>OpChain</code> applies its factors in sequence, with the rightmost factor acting first, and an <code>OpSum</code> sums the contributions of its terms:</p><pre><code class="language-julia-repl hljs">julia&gt; apply(Op(PAULI_X, 1) * Op(PAULI_Z, 1), [1.0, 0.0], [1 =&gt; 2])
+2-element Vector{Float64}:
+ 0.0
+ 1.0
+
+julia&gt; apply(Op(PAULI_X, 1) + Op(PAULI_Z, 2), v, bi2)
+4-element Vector{Float64}:
+ 1.0
+ 0.0
+ 1.0
+ 0.0
+</code></pre><h3 id="Applying-to-basis-states"><a class="docs-heading-anchor" href="#Applying-to-basis-states">Applying to basis states</a><a id="Applying-to-basis-states-1"></a><a class="docs-heading-anchor-permalink" href="#Applying-to-basis-states" title="Permalink"></a></h3><p>A single basis state can be given by its (1-based) index, in which case the result is returned sparsely as a <code>Dict</code> mapping basis index to amplitude. This is exactly column <code>i</code> of the matrix representation:</p><pre><code class="language-julia-repl hljs">julia&gt; apply(Op(PAULI_X, 2), 1, bi2)  # X₂|00⟩ = |01⟩
+Dict{Int64, Int64} with 1 entry:
+  2 =&gt; 1
+</code></pre><p>A superposition of basis states can be passed the same way, as a <code>Dict</code>:</p><pre><code class="language-julia-repl hljs">julia&gt; sort(collect(apply(Op(PAULI_X, 1), Dict(1 =&gt; 1.0, 2 =&gt; 0.5), bi2)))
+2-element Vector{Pair{Int64, Float64}}:
+ 3 =&gt; 1.0
+ 4 =&gt; 0.5
+</code></pre><h3 id="Compiled-kernels"><a class="docs-heading-anchor" href="#Compiled-kernels">Compiled kernels</a><a id="Compiled-kernels-1"></a><a class="docs-heading-anchor-permalink" href="#Compiled-kernels" title="Permalink"></a></h3><p>When the same operator is applied many times — the inner loop of an iterative eigensolver, say — <a href="../../api/operations/#OperatorAlgebra.compile_apply"><code>compile_apply</code></a> pays the cost of specializing a kernel to it once, up front:</p><pre><code class="language-julia-repl hljs">julia&gt; Hsmall = Op(PAULI_X, 1) + Op(PAULI_Z, 2);
+
+julia&gt; c = compile_apply(Hsmall, bi2);  # allocating:  w = c(v)
+
+julia&gt; c! = compile_apply!(Hsmall, bi2);  # in-place:  c!(w, v)
+
+julia&gt; c(v) == apply(Hsmall, v, bi2)
+true
+
+julia&gt; out = similar(v); c!(out, v); out == c(v)
+true
+</code></pre><p>Both accept a <code>threads</code> keyword, and a <code>max_combos</code> guard that refuses operators whose terms are too wide to unroll — for those, plain <code>apply</code>/<code>apply!</code> has no such limit.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../operators/">« Operator Types</a><a class="docs-footer-nextpage" href="../../examples/">Examples »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 3 August 2026 14:56">Monday 3 August 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,65 +1,63 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · OperatorAlgebra.jl</title><meta name="title" content="Examples · OperatorAlgebra.jl"/><meta property="og:title" content="Examples · OperatorAlgebra.jl"/><meta property="twitter:title" content="Examples · OperatorAlgebra.jl"/><meta name="description" content="Documentation for OperatorAlgebra.jl."/><meta property="og:description" content="Documentation for OperatorAlgebra.jl."/><meta property="twitter:description" content="Documentation for OperatorAlgebra.jl."/><meta property="og:url" content="https://h-mnzlr.github.io/OperatorAlgebra.jl/examples/"/><meta property="twitter:url" content="https://h-mnzlr.github.io/OperatorAlgebra.jl/examples/"/><link rel="canonical" href="https://h-mnzlr.github.io/OperatorAlgebra.jl/examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">OperatorAlgebra.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../guide/getting_started/">Getting Started</a></li><li><a class="tocitem" href="../guide/operators/">Operator Types</a></li><li><a class="tocitem" href="../guide/matrix_representation/">Matrix Representations</a></li></ul></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#Quantum-Spin-Models"><span>Quantum Spin Models</span></a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/types/">Types</a></li><li><a class="tocitem" href="../api/operations/">Operations</a></li><li><a class="tocitem" href="../api/constants/">Constants</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/h-mnzlr/OperatorAlgebra.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="github.com/h-mnzlr/OperatorAlgebra.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This page contains complete examples demonstrating various use cases of OperatorAlgebra.jl, creating hamiltonians and then using the created matrices to perform calculations.</p><h2 id="Quantum-Spin-Models"><a class="docs-heading-anchor" href="#Quantum-Spin-Models">Quantum Spin Models</a><a id="Quantum-Spin-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Quantum-Spin-Models" title="Permalink"></a></h2><h3 id="Transverse-Field-Ising-Model"><a class="docs-heading-anchor" href="#Transverse-Field-Ising-Model">Transverse Field Ising Model</a><a id="Transverse-Field-Ising-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Transverse-Field-Ising-Model" title="Permalink"></a></h3><p>The Hamiltonian is: H = -J∑ᵢ σᵢᶻσᵢ₊₁ᶻ - h∑ᵢ σᵢˣ</p><pre><code class="language-julia hljs">using OperatorAlgebra
-using LinearAlgebra
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · OperatorAlgebra.jl</title><meta name="title" content="Examples · OperatorAlgebra.jl"/><meta property="og:title" content="Examples · OperatorAlgebra.jl"/><meta property="twitter:title" content="Examples · OperatorAlgebra.jl"/><meta name="description" content="Documentation for OperatorAlgebra.jl."/><meta property="og:description" content="Documentation for OperatorAlgebra.jl."/><meta property="twitter:description" content="Documentation for OperatorAlgebra.jl."/><meta property="og:url" content="https://h-mnzlr.github.io/OperatorAlgebra.jl/examples/"/><meta property="twitter:url" content="https://h-mnzlr.github.io/OperatorAlgebra.jl/examples/"/><link rel="canonical" href="https://h-mnzlr.github.io/OperatorAlgebra.jl/examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">OperatorAlgebra.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../guide/getting_started/">Getting Started</a></li><li><a class="tocitem" href="../guide/operators/">Operator Types</a></li><li><a class="tocitem" href="../guide/matrix_representation/">Matrix Representations</a></li></ul></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#Quantum-Spin-Models"><span>Quantum Spin Models</span></a></li></ul></li><li><span class="tocitem">Extensions</span><ul><li><a class="tocitem" href="../extensions/">Overview</a></li><li><a class="tocitem" href="../extensions/linearmaps/">LinearMaps</a></li><li><a class="tocitem" href="../extensions/itensormps/">ITensorMPS</a></li><li><a class="tocitem" href="../extensions/latexify/">Latexify</a></li><li><a class="tocitem" href="../extensions/symbasis/">SymBasis</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/types/">Types</a></li><li><a class="tocitem" href="../api/operations/">Operations</a></li><li><a class="tocitem" href="../api/sites/">Custom Sites</a></li><li><a class="tocitem" href="../api/constants/">Constants</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/h-mnzlr/OperatorAlgebra.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/h-mnzlr/OperatorAlgebra.jl/blob/main/docs/src/examples.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This page contains complete examples demonstrating various use cases of OperatorAlgebra.jl, creating hamiltonians and then using the created matrices to perform calculations.</p><h2 id="Quantum-Spin-Models"><a class="docs-heading-anchor" href="#Quantum-Spin-Models">Quantum Spin Models</a><a id="Quantum-Spin-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Quantum-Spin-Models" title="Permalink"></a></h2><h3 id="Transverse-Field-Ising-Model"><a class="docs-heading-anchor" href="#Transverse-Field-Ising-Model">Transverse Field Ising Model</a><a id="Transverse-Field-Ising-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Transverse-Field-Ising-Model" title="Permalink"></a></h3><p>The Hamiltonian is: H = -J∑ᵢ σᵢᶻσᵢ₊₁ᶻ - h∑ᵢ σᵢˣ</p><pre><code class="language-julia-repl hljs">julia&gt; using OperatorAlgebra, LinearAlgebra
 
-function tfim_hamiltonian(N::Int; J=1.0, h=0.5)
-    &quot;&quot;&quot;Transverse Field Ising Model&quot;&quot;&quot;
-    H = OpSum()
-    
-    # Ising interaction
-    H = sum(-J * Op(PAULI_Z, i) * Op(PAULI_Z, i+1) for i in 1:N-1)
-    
-    # Transverse field
-    H += sum(h * Op(PAULI_X, i) for i in 1:N)
+julia&gt; function tfim_hamiltonian(N::Int; J=1.0, h=0.5)
+           # Ising interaction
+           H = sum(-J * Op(PAULI_Z, i) * Op(PAULI_Z, i+1) for i in 1:N-1)
+           # Transverse field
+           H += sum(h * Op(PAULI_X, i) for i in 1:N)
+           return H
+       end
+tfim_hamiltonian (generic function with 1 method)
 
-    return H
-end
+julia&gt; N = 8;
 
-# Build and diagonalize
-N = 8
-H = tfim_hamiltonian(N, J=1.0, h=0.5)
-H_matrix = Array(H, 1:N)
-eigenvalues = eigvals(H_matrix)
-ground_energy = minimum(eigenvalues)
+julia&gt; H = tfim_hamiltonian(N, J=1.0, h=0.5);
 
-println(&quot;Ground state energy: &quot;, ground_energy)</code></pre><h3 id="Heisenberg-Model"><a class="docs-heading-anchor" href="#Heisenberg-Model">Heisenberg Model</a><a id="Heisenberg-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Heisenberg-Model" title="Permalink"></a></h3><p>The XXZ Heisenberg model: H = J∑ᵢ (σᵢˣσᵢ₊₁ˣ + σᵢʸσᵢ₊₁ʸ + Δσᵢᶻσᵢ₊₁ᶻ)</p><pre><code class="language-julia hljs">using Arpack
-using SparseArrays
+julia&gt; H_matrix = Array(H, (1:N) .=&gt; 2);  # N sites, each of local dimension 2
 
-function heisenberg_hamiltonian(N::Int; J=1.0, Δ=1.0)
-    &quot;&quot;&quot;Heisenberg XXZ model&quot;&quot;&quot;
-    H = sum(
-        Op(PAULI_X, i) * Op(PAULI_X, i+1) +
-        Op(PAULI_Y, i) * Op(PAULI_Y, i+1) +
-        Δ * Op(PAULI_Z, i) * Op(PAULI_Z, i+1) 
-    for i in 1:N-1)
-    
-    return H
-end
+julia&gt; ground_energy = minimum(eigvals(Symmetric(H_matrix)));
 
-# Isotropic case (Δ = 1)
-H_iso = heisenberg_hamiltonian(6, J=1.0, Δ=1.0)
-H_sparse = sparse(H_iso, 1:6)  # Convert to sparse matrix
+julia&gt; round(ground_energy, digits = 8)  # rounded: eigvals&#39; last ulps are BLAS-dependent
+-7.64059255
+</code></pre><h3 id="Heisenberg-Model"><a class="docs-heading-anchor" href="#Heisenberg-Model">Heisenberg Model</a><a id="Heisenberg-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Heisenberg-Model" title="Permalink"></a></h3><p>The XXZ Heisenberg model: H = J∑ᵢ (σᵢˣσᵢ₊₁ˣ + σᵢʸσᵢ₊₁ʸ + Δσᵢᶻσᵢ₊₁ᶻ)</p><pre><code class="language-julia-repl hljs">julia&gt; using OperatorAlgebra, SparseArrays
 
-# Find extremal eigenvalues using Arpack
-eigs(H_sparse)</code></pre><h3 id="Tight-Binding-Model"><a class="docs-heading-anchor" href="#Tight-Binding-Model">Tight-Binding Model</a><a id="Tight-Binding-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Tight-Binding-Model" title="Permalink"></a></h3><p>Using creation and annihilation operators:</p><pre><code class="language-julia hljs">function tight_binding_chain(L::Int; t=1.0, V=1.0)
-    &quot;&quot;&quot;Tight-binding model on a chain&quot;&quot;&quot;
+julia&gt; function heisenberg_hamiltonian(N::Int; J=1.0, Δ=1.0)
+           sum(
+               Op(PAULI_X, i) * Op(PAULI_X, i+1) +
+               Op(PAULI_Y, i) * Op(PAULI_Y, i+1) +
+               Δ * Op(PAULI_Z, i) * Op(PAULI_Z, i+1)
+           for i in 1:N-1)
+       end
+heisenberg_hamiltonian (generic function with 1 method)
 
-    # Diagonal term: Nearest-neighbor potential
-    H_nn = sum(Op(OCC_PART, i) * Op(OCC_PART, i+1) for i in 1:L-1)
+julia&gt; H_iso = heisenberg_hamiltonian(6, J=1.0, Δ=1.0);  # isotropic case (Δ = 1)
 
-    # Offdiagonal term: Hopping
-    H_hop = OpSum()
-    for i in 1:L-1
-        hop = Op(RAISE, i) * Op(LOWER, i+1)
-        H_hop += hop + hop&#39;
-    end
+julia&gt; H_sparse = sparse(H_iso, (1:6) .=&gt; 2);  # convert to a sparse matrix
 
-    return V * H_nn - t * H_hop
-end
+julia&gt; size(H_sparse)
+(64, 64)
+</code></pre><p>The sparse matrix can then be handed to an iterative eigensolver to find the extremal eigenvalues, e.g. with <a href="https://github.com/JuliaLinearAlgebra/Arpack.jl">Arpack.jl</a>:</p><pre><code class="language-julia hljs">using Arpack
+eigs(H_sparse)</code></pre><h3 id="Tight-Binding-Model"><a class="docs-heading-anchor" href="#Tight-Binding-Model">Tight-Binding Model</a><a id="Tight-Binding-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Tight-Binding-Model" title="Permalink"></a></h3><p>Using creation and annihilation operators:</p><pre><code class="language-julia-repl hljs">julia&gt; function tight_binding_chain(L::Int; t=1.0, V=1.0)
+           # Diagonal term: nearest-neighbor potential
+           H_nn = sum(Op(OCC_PART, i) * Op(OCC_PART, i+1) for i in 1:L-1)
+           # Offdiagonal term: hopping
+           H_hop = OpSum()
+           for i in 1:L-1
+               hop = Op(RAISE, i) * Op(LOWER, i+1)
+               H_hop += hop + hop&#39;
+           end
+           return V * H_nn - t * H_hop
+       end
+tight_binding_chain (generic function with 1 method)
 
-# Small tight-binding chain at the critical point
-L = 6
-H = tight_binding_chain(L, t=1.0, V=2.0)</code></pre><h3 id="Tight-binding-chain-on-a-random-lattices"><a class="docs-heading-anchor" href="#Tight-binding-chain-on-a-random-lattices">Tight-binding chain on a random lattices</a><a id="Tight-binding-chain-on-a-random-lattices-1"></a><a class="docs-heading-anchor-permalink" href="#Tight-binding-chain-on-a-random-lattices" title="Permalink"></a></h3><pre><code class="language-julia hljs">using Graphs
+julia&gt; L = 6;
+
+julia&gt; H = tight_binding_chain(L, t=1.0, V=2.0);
+
+julia&gt; size(sparse(H, (1:L) .=&gt; 2))
+(64, 64)
+</code></pre><h3 id="Tight-binding-chain-on-a-random-lattices"><a class="docs-heading-anchor" href="#Tight-binding-chain-on-a-random-lattices">Tight-binding chain on a random lattices</a><a id="Tight-binding-chain-on-a-random-lattices-1"></a><a class="docs-heading-anchor-permalink" href="#Tight-binding-chain-on-a-random-lattices" title="Permalink"></a></h3><pre><code class="language-julia hljs">using Graphs
 
 g = random_regular_graph(3, 10)  # 10 sites, degree 3
 
@@ -79,45 +77,57 @@ function tightbinding_graph(g::Graph; t=1.0, V=1.0)
     return V * H_nn - t * H_hop
 end
 H = tightbinding_graph(g, t=1.0, V=2.0)
-H_sparse = sparse(H, vertices(g))</code></pre><h3 id="Hubbard-Model"><a class="docs-heading-anchor" href="#Hubbard-Model">Hubbard Model</a><a id="Hubbard-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Hubbard-Model" title="Permalink"></a></h3><pre><code class="language-julia hljs">function hubbard_chain(N::Int; t=1.0, U=2.0)
-    &quot;&quot;&quot;hard-core boson 1D Hubbard model&quot;&quot;&quot;
+H_sparse = sparse(H, vertices(g) .=&gt; 2)</code></pre><h3 id="Hubbard-Model"><a class="docs-heading-anchor" href="#Hubbard-Model">Hubbard Model</a><a id="Hubbard-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Hubbard-Model" title="Permalink"></a></h3><pre><code class="language-julia-repl hljs">julia&gt; function hubbard_chain(N::Int; t=1.0, U=2.0)
+           # Diagonal term: on-site interaction between spin species
+           H_int = OpSum()
+           for i in 1:N
+               H_int += Op(OCC_PART, (i, :up)) * Op(OCC_PART, (i, :down))
+           end
+           # Offdiagonal term: hopping of both spin species
+           H_hop = OpSum()
+           for i in 1:N-1, species in (:up, :down)
+               H_hop += Op(RAISE, (i, species)) * Op(LOWER, (i+1, species))
+               H_hop += Op(LOWER, (i, species)) * Op(RAISE, (i+1, species))
+           end
+           return U * H_int - t * H_hop
+       end
+hubbard_chain (generic function with 1 method)
 
-    # Diagonal term: On-site interaction between spin species
-    H_int = OpSum()
-    for i in 1:N
-        H_int += Op(OCC_PART, (i, :up)) * Op(OCC_PART, (i, :down))
-    end
+julia&gt; H = hubbard_chain(6, t=1.0, U=2.0);
 
-    # Offdiagonal term: Hopping of both spin species
-    H_hop = OpSum()
-    for i in 1:N-1, species in (:up, :down)
-        H_hop += Op(RAISE, (i, species)) * Op(LOWER, (i+1, species))
-        H_hop += Op(LOWER, (i, species)) * Op(RAISE, (i+1, species))
-    end
+julia&gt; bi = [(i, s) =&gt; 2 for s in (:up, :down) for i in 1:6];  # tuple site identifiers
 
-    return U * H_int - t * H_hop
-end
+julia&gt; H_matrix = sparse(H, bi);
 
-H = hubbard_chain(6, t=1.0, U=2.0)
-basis = [(i, s) for s in (:up, :down) for i in 1:6]
-H_matrix = sparse(H, basis)</code></pre><h3 id="Majorana-SYK4-model"><a class="docs-heading-anchor" href="#Majorana-SYK4-model">Majorana SYK4 model</a><a id="Majorana-SYK4-model-1"></a><a class="docs-heading-anchor-permalink" href="#Majorana-SYK4-model" title="Permalink"></a></h3><pre><code class="language-julia hljs"># one-site Majorana operators for both Majorana species
-const MAJORANA_1 = PAULI_X
-const MAJORANA_2 = PAULI_Y
+julia&gt; size(H_matrix)
+(4096, 4096)
 
-function majorana_SYK4(N::Int; J=1.0)
-    &quot;&quot;&quot;Majorana SYK4 model Hamiltonian&quot;&quot;&quot;
+julia&gt; H_matrix == H_matrix&#39;  # the chain is Hermitian
+true
+</code></pre><h3 id="Majorana-SYK4-model"><a class="docs-heading-anchor" href="#Majorana-SYK4-model">Majorana SYK4 model</a><a id="Majorana-SYK4-model-1"></a><a class="docs-heading-anchor-permalink" href="#Majorana-SYK4-model" title="Permalink"></a></h3><pre><code class="language-julia-repl hljs">julia&gt; using OperatorAlgebra, LinearAlgebra, Random
 
-    # list of all different majorana species operators
-    majorana_ops = [[Op(MAJORANA_1, i) for i in 1:N÷2]; [Op(MAJORANA_2, i) for i in 1:N÷2]]
+julia&gt; const MAJORANA_1 = PAULI_X; const MAJORANA_2 = PAULI_Y;  # the two species
 
-    H = OpSum()
-    for i in 1:N, j in i+1:N, k in j+1:N, l in k+1:N
-        H += (majorana_ops[i] * majorana_ops[j] + majorana_ops[k] * majorana_ops[l])
-    end
+julia&gt; function majorana_SYK4(N::Int; J=1.0)
+           # list of all different majorana species operators
+           majorana_ops = [[Op(MAJORANA_1, i) for i in 1:N÷2]; [Op(MAJORANA_2, i) for i in 1:N÷2]]
+           H = OpSum()
+           for i in 1:N, j in i+1:N, k in j+1:N, l in k+1:N
+               H += randn() * (majorana_ops[i] * majorana_ops[j] * majorana_ops[k] * majorana_ops[l])
+           end
+           return J * H
+       end
+majorana_SYK4 (generic function with 1 method)
 
-    return J * H
-end
+julia&gt; Random.seed!(42);
 
-H_SYK4 = majorana_SYK4(12, J=1.0)
-# To ensure fermionic parity symmetry of the constructed operator, we can use the PAULI_Z matrix in place of the identity
-H = atsite(Matrix, H_SYK4, 1:12, id=PAULI_Z)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../guide/matrix_representation/">« Matrix Representations</a><a class="docs-footer-nextpage" href="../api/types/">Types »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.15.0 on <span class="colophon-date" title="Wednesday 5 November 2025 18:09">Wednesday 5 November 2025</span>. Using Julia version 1.11.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+julia&gt; H_SYK4 = majorana_SYK4(12, J=1.0);
+
+julia&gt; H = Array(fermion(H_SYK4));  # 2^6 = 64, for the N÷2 = 6 sites
+
+julia&gt; size(H)
+(64, 64)
+
+julia&gt; H ≈ H&#39;  # Hermitian, thanks to the Jordan-Wigner strings
+true
+</code></pre><p>Tagging the sites with <a href="../api/sites/#OperatorAlgebra.fermion"><code>fermion</code></a> is what makes this correct: the Jordan-Wigner strings are then threaded through the embedding automatically, so the 12 Majoranas genuinely anticommute. Without the tag the sites would commute and the result would not even be Hermitian.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../guide/matrix_representation/">« Matrix Representations</a><a class="docs-footer-nextpage" href="../extensions/">Overview »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 3 August 2026 14:59">Monday 3 August 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
