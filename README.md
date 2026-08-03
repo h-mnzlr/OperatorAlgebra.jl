@@ -19,7 +19,7 @@ The package also provides interfaces to use these methods with symmetry-reduced 
 - **Matrix-free application**: Apply an operator to a vector or individual basis states using memory-free (`apply`/`apply!`) or in-memory compiled methods (`compile_apply`/`compile_apply!`) based on julia's metaprogramming.
 - **Linear Algebra Operations & Operator manipulation**: Use typical linear algebra operations like trace (`tr`) or adjoint (`adjoint`, `'`) operators, and others, giving the whole toolbox necessary to, e.g., automate perturbation theory calculations on the level of the algebra.
 - **Package Extensions**: Optional integrations that activate automatically when their companion package is loaded:
-  - [SymBasis.jl](https://github.com/kceven/SymBasis.jl): Symmetry-reduced matrices and application, efficiently construct you matrices in a subspace or apply operators matrix-free to states in the symmetry-reduced basis.
+  - [SymBasis.jl](https://github.com/cevenkadir/SymBasis.jl): Symmetry-reduced matrices and application, efficiently construct you matrices in a subspace or apply operators matrix-free to states in the symmetry-reduced basis.
   - [LinearMaps.jl](https://github.com/JuliaLinearAlgebra/LinearMaps.jl): matrix-free `LinearMap` operator representations
   - [ITensorMPS.jl](https://github.com/ITensor/ITensorMPS.jl): automatic conversion to Matrix Product Operators (MPOs)
   - [Latexify.jl](https://github.com/korsbo/Latexify.jl): LaTeX rendering of operators, including notebook display
