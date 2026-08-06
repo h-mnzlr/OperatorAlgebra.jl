@@ -416,6 +416,43 @@ end
     end
 end
 
+@testset "Trace dimension accumulator type" begin
+    @testset "Int dimension product overflows past 64 qubits" begin
+        n = sum(Op([1 0; 0 0], i) for i in 1:100)
+        bi = basis_info(n)
+
+        @test tr(n, bi) == 0                          # 2^99 wraps to 0 in Int64
+        @test tr(Float64, n, bi) ≈ 100 * 2.0^99
+        @test tr(BigInt, n, bi) == big(100) * big(2)^99
+        @test tr(Float64, n) ≈ tr(Float64, n, bi)
+    end
+
+    @testset "no overflow across sizes where Int still works" begin
+        # L * 2^(L-1) must stay under typemax(Int64); L = 58 is just inside it
+        for L in (10, 30, 58)
+            n = sum(Op([1 0; 0 0], i) for i in 1:L)
+            bi = basis_info(n)
+
+            @test tr(Float64, n, bi) ≈ tr(n, bi)
+            @test tr(Float64, n, bi) ≈ L * 2.0^(L - 1)
+        end
+    end
+
+    @testset "T applies to dimensions only, not to the operator" begin
+        op = Op([1.0+0im 0; 0 2.0], 1)
+        bi = [1 => 2, 2 => 2]
+
+        @test tr(Float64, op, bi) isa ComplexF64
+        @test tr(Float64, op, bi) ≈ tr(op, bi)
+        @test tr(Float64, Op([1 0; 0 2], 1), bi) isa Float64
+    end
+
+    @testset "omitting T preserves the untyped result type" begin
+        @test tr(Op([1 0; 0 2], 1), [1 => 2]) isa Int
+        @test tr(Op([1.0 0.0; 0.0 2.0], 1), [1 => 2]) isa Float64
+    end
+end
+
 @testset "diag()" begin
     # diag(op) keeps the operator structure and replaces every factor's matrix by its
     # diagonal part, so it commutes with building the full matrix only for a single site.
