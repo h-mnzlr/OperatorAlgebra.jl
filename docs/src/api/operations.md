@@ -12,6 +12,8 @@ end
 ```@docs
 basis_info
 sites
+sitedims
+basisdim
 mapsites
 ```
 
@@ -29,7 +31,7 @@ compile_apply!
 Every conversion embeds the operator into the **full** Hilbert space described by a
 `site => dim` basis description `bi`, inserting identities at the sites the operator does not
 touch. There is no per-term or per-factor conversion: an `Op`, `OpChain` and `OpSum` all go
-through the same path and all produce a matrix of size `prod(last, bi)`. Omitting `bi`
+through the same path and all produce a matrix of size [`basisdim(bi)`](@ref). Omitting `bi`
 derives it from the operator itself via [`basis_info`](@ref).
 
 | Call | Result |

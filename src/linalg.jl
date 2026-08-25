@@ -19,7 +19,7 @@ same convention as [`atsite`](@ref) and [`normal_order`](@ref)); called without 
 the basis is derived from the operator itself.
 
 Sites a term does not touch contribute their dimension, so every term carries a factor
-of up to `prod(last.(bi))`. Without `T` that product is formed in the element type of
+of up to [`basisdim(bi)`](@ref). Without `T` that product is formed in the element type of
 `bi`'s dimensions -- `Int` for a `basis_info` basis, which silently wraps around past
 64 qubits (`tr` of a 100-site operator returns `0`, since `2^99 % 2^64 == 0`). Pass `T`
 to accumulate those dimension factors in another type instead: `tr(Float64, op, bi)`
@@ -55,11 +55,10 @@ tr(Float64, big, basis_info(big))  # 6.338253001141147e31
 """
 LinearAlgebra.tr(op::AbstractOp) = tr(op, basis_info(op))
 LinearAlgebra.tr(::Type{T}, op::AbstractOp) where {T<:Number} = tr(T, op, basis_info(op))
-LinearAlgebra.tr(op::AbstractOp, bi::AbstractVector{<:Pair}) = tr(eltype(last.(bi)), op, bi)
+LinearAlgebra.tr(op::AbstractOp, bi::AbstractVector{<:Pair}) = tr(eltype(sitedims(bi)), op, bi)
 LinearAlgebra.tr(::Type{T}, op::AbstractOp, bi::AbstractVector{<:Pair}) where {T<:Number} = begin
-    basis = first.(bi)
-    dims = last.(bi)
-    pos = Dict(s => i for (i, s) in enumerate(basis))
+    dims = sitedims(bi)
+    pos = _positiondict(bi)
 
     # Ordering the factors is only needed when exchanging two of them can change the
     # term's value. If no site in the basis is `FermionSite`, every site's `exchange_phase`

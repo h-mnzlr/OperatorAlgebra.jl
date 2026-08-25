@@ -60,10 +60,10 @@ The basis information is a collection of pairs `site => dim` for each site, wher
 for the site and `dim` is the local dimension at that site.
 """
 function decompose(A::AbstractMatrix, bi; tol=1e-10)
-    sites, dims = first.(bi), last.(bi)
+    basis, dims = sites(bi), sitedims(bi)
     all(>(0), dims) || throw(ArgumentError("local dimensions must be positive, got $dims"))
     size(A) == (prod(dims), prod(dims)) ||
         throw(DimensionMismatch("$(size(A)) matrix does not factor into local dimensions $dims"))
 
-    _decompose(A, sites, dims, Ω -> norm(Ω) > tol)
+    _decompose(A, basis, dims, Ω -> norm(Ω) > tol)
 end

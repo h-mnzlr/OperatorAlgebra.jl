@@ -57,13 +57,13 @@ op_full = atsite(op, basis_info(op))
 See also: [`Op`](@ref), [`basis_info`](@ref), `sparse`
 """
 function atsite(T, op::Op, bi::AbstractVector{<:Pair})
-    sites = first.(bi)
-    dims = last.(bi)
+    basis = sites(bi)
+    dims = sitedims(bi)
 
-    idx_kron = findfirst(==(op.site), sites)
+    idx_kron = findfirst(==(op.site), basis)
     idx_kron === nothing && throw(ArgumentError("Site $(op.site) not found in basis"))
 
-    length(sites) == 1 && return T(op.mat)
+    length(basis) == 1 && return T(op.mat)
 
     # No Fermionic site anywhere in the basis: every `exchange_string` is the identity, so
     # the even/odd split is a no-op (even_term() + odd_term() == plain kron of the whole
@@ -75,7 +75,7 @@ function atsite(T, op::Op, bi::AbstractVector{<:Pair})
 
     even_term() = kron(I.(dims[1:idx_kron-1])..., T(even), I.(dims[idx_kron+1:end])...)
     odd_term() = kron(
-        exchange_string.(sites[1:idx_kron-1], dims[1:idx_kron-1])...,
+        exchange_string.(basis[1:idx_kron-1], dims[1:idx_kron-1])...,
         T(odd),
         I.(dims[idx_kron+1:end])...,
     )
@@ -87,10 +87,10 @@ end
 
 atsite(op::AbstractOp, bi::AbstractVector{<:Pair}) = atsite(identity, op, bi)
 atsite(T, os::OpSum, bi::AbstractVector{<:Pair}) = begin
-    isempty(os.ops) && return T(zeros(eltype(os), prod(last, bi), prod(last, bi)))
+    isempty(os.ops) && return T(zeros(eltype(os), basisdim(bi), basisdim(bi)))
     sum(atsite(T, op, bi) for op in os.ops)
 end
 atsite(T, oc::OpChain, bi::AbstractVector{<:Pair}) = begin
-    isempty(oc.ops) && return T(I(prod(last, bi)))
+    isempty(oc.ops) && return T(I(basisdim(bi)))
     prod(atsite(T, op, bi) for op in oc.ops)
 end

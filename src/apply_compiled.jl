@@ -64,7 +64,7 @@ end
 # order and distributing OpSum factors nested inside chains; `Op` keeps the term lists
 # concretely typed for `_term_spec`.
 _apply_spec(op::AbstractOp, bi, max_combos) =
-    (_total_dim(bi), Tuple(_term_spec(t, bi, max_combos) for t in _terms(op, Op)))
+    (basisdim(bi), Tuple(_term_spec(t, bi, max_combos) for t in _terms(op, Op)))
 
 # --- expression generation from a spec --------------------------------------------------
 #

@@ -4,8 +4,6 @@
 #     i - 1 = sum(d_k * stride_k),   stride_k = prod(dims[k+1:end])
 # so that `apply(op, i, bi)` reproduces column `i` of `atsite(op, bi)`.
 
-_total_dim(bi) = prod(last, bi; init=1)
-
 _stride_and_dim(site, bi) = begin
     idx = findfirst(p -> isequal(first(p), site), bi)
     isnothing(idx) && throw(ArgumentError("Site $site not found in basis"))
@@ -99,7 +97,7 @@ _collapse_chain(ops::AbstractVector) = begin
     out
 end
 _jw_expand_op(o::Op, bi) = begin
-    basis, dims = first.(bi), last.(bi)
+    basis, dims = sites(bi), sitedims(bi)
     idx = findfirst(p -> isequal(first(p), o.site), bi)
     isnothing(idx) && throw(ArgumentError("Site $(o.site) not found in basis"))
 
@@ -144,16 +142,16 @@ See also: [`apply!`](@ref), [`basis_info`](@ref), [`atsite`](@ref)
 """
 apply(op::AbstractOp, i::Integer, bi::AbstractVector{<:Pair}=basis_info(op)) = begin
     flat = _jw_expand(op, bi)
-    1 <= i <= _total_dim(bi) ||
-        throw(ArgumentError("Basis index $i out of range 1:$(_total_dim(bi))."))
+    1 <= i <= basisdim(bi) ||
+        throw(ArgumentError("Basis index $i out of range 1:$(basisdim(bi))."))
     T = eltype(flat)
     _apply_index(flat, Dict{Int,T}(Int(i) => one(T)), bi)
 end
 
 apply(op::AbstractOp, states::Dict{Int,T}, bi::AbstractVector{<:Pair}=basis_info(op)) where {T} = begin
     flat = _jw_expand(op, bi)
-    all(1 <= i <= _total_dim(bi) for i in keys(states)) ||
-        throw(ArgumentError("Some basis indices out of range 1:$(_total_dim(bi))."))
+    all(1 <= i <= basisdim(bi) for i in keys(states)) ||
+        throw(ArgumentError("Some basis indices out of range 1:$(basisdim(bi))."))
     _apply_index(flat, Dict{Int,promote_type(T, eltype(flat))}(states), bi)
 end
 
@@ -238,7 +236,7 @@ apply!(w, Op(PAULI_X, 1), v, bi)   # w == [0, 0, 1, 0], v unchanged
 See also: [`apply`](@ref), [`basis_info`](@ref)
 """
 apply!(w::AbstractVector, op::AbstractOp, v::AbstractVector, bi::AbstractVector{<:Pair}=basis_info(op)) = begin
-    N = _total_dim(bi)
+    N = basisdim(bi)
     length(v) == N ||
         throw(DimensionMismatch("State vector of length $(length(v)) does not match basis of total dimension $N."))
     length(w) == N ||

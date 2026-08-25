@@ -706,13 +706,81 @@ end
 end
 
 @testset "site helpers and cross-type site comparison" begin
-    @testset "site_dims returns the local dimensions" begin
+    @testset "sitedims returns the local dimensions" begin
         op = Op(PAULI_X, 1) + Op(rand(3, 3), 2)
-        @test OperatorAlgebra.site_dims(op) == [2, 3]
-        @test OperatorAlgebra.site_dims(Op(PAULI_X, 1)) == [2]
+        @test sitedims(op) == [2, 3]
+        @test sitedims(Op(PAULI_X, 1)) == [2]
         # it is the second half of basis_info, as sites() is the first
-        @test collect(zip(sites(op), OperatorAlgebra.site_dims(op))) ==
+        @test collect(zip(sites(op), sitedims(op))) ==
               [(s, d) for (s, d) in basis_info(op)]
+    end
+
+    @testset "sites and sitedims split a basis-info vector" begin
+        bi = [1 => 2, 2 => 3, 5 => 4]
+
+        @test sites(bi) == [1, 2, 5]
+        @test sitedims(bi) == [2, 3, 4]
+
+        # the operator methods are the basis_info ones, applied to basis_info(op)
+        op = Op(PAULI_X, 1) * Op(rand(3, 3), 2)
+        @test sites(op) == sites(basis_info(op))
+        @test sitedims(op) == sitedims(basis_info(op))
+
+        # heterogeneous and tagged sites survive unchanged
+        @test sites(Pair[1 => 2, :a => 3]) == [1, :a]
+        @test sites([fermion(1) => 2, 2 => 3]) == [fermion(1), 2]
+
+        @test isempty(sites(Pair{Int,Int}[]))
+        @test isempty(sitedims(Pair{Int,Int}[]))
+    end
+
+    @testset "basisdim multiplies the local dimensions" begin
+        @test basisdim(Op(PAULI_X, 1)) == 2
+        @test basisdim(Op(rand(3, 3), :a)) == 3
+
+        op = Op(PAULI_X, 1) * Op(rand(3, 3), 2) + Op(rand(5, 5), 3)
+        @test basisdim(op) == 2 * 3 * 5
+        @test basisdim(op) == prod(sitedims(op))
+
+        # a repeated site is one basis entry, so it is counted once
+        @test basisdim(Op(PAULI_X, 1) * Op(PAULI_Z, 1)) == 2
+    end
+
+    @testset "basisdim is the size of the full-space matrix" begin
+        op = Op(PAULI_X, 1) * Op(rand(3, 3), 2)
+        @test size(Array(op)) == (basisdim(op), basisdim(op))
+        @test size(Array(op, basis_info(op))) == (basisdim(basis_info(op)), basisdim(basis_info(op)))
+    end
+
+    @testset "basisdim accepts any basis-info vector" begin
+        @test basisdim(basis_info(Op(PAULI_X, 1) + Op(PAULI_Z, 2))) == 4
+        @test basisdim([1 => 2, 2 => 3]) == 6
+        @test basisdim(Pair[1 => 2, :a => 3]) == 6
+        @test basisdim([fermion(1) => 2, 2 => 3]) == 6
+
+        # the empty tensor product is the one-dimensional space
+        @test basisdim(Pair{Int,Int}[]) == 1
+    end
+
+    @testset "basisdim returns the requested element type" begin
+        op = Op(PAULI_X, 1) * Op(rand(3, 3), 2)
+        bi = [1 => 2, 2 => 3]
+
+        @test basisdim(Int, op) == basisdim(op)
+        @test basisdim(Int, bi) == basisdim(bi)
+
+        @test basisdim(Float64, op) === 6.0
+        @test basisdim(BigInt, bi) isa BigInt
+        @test basisdim(BigInt, Pair{Int,Int}[]) == 1
+    end
+
+    @testset "basisdim in a wide type does not overflow" begin
+        # 100 qubits: the product exceeds typemax(Int), which is what the element type is for
+        qubits = (1:100) .=> 2
+
+        @test basisdim(BigInt, qubits) == big(2)^100
+        @test basisdim(Float64, qubits) ≈ 2.0^100
+        @test basisdim(qubits) != big(2)^100  # ...while the default Int silently wraps
     end
 
     @testset "different AbstractSite types are never the same site" begin

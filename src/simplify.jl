@@ -495,11 +495,11 @@ See also: [`simplify`](@ref), [`basis_info`](@ref), [`atsite`](@ref),
 normal_order(op::AbstractOp) = normal_order(op, basis_info(op))
 
 normal_order(op::AbstractOp, bi::AbstractVector{<:Pair}) = begin
-    basis = first.(bi)
+    pos = _positiondict(bi)
     for s in sites(op)
-        any(==(s), basis) || throw(ArgumentError("Site $s not found in basis"))
+        haskey(pos, s) || throw(ArgumentError("Site $s not found in basis"))
     end
-    _normal_order(op, Dict(s => i for (i, s) in enumerate(basis)))
+    _normal_order(op, pos)
 end
 
 # The exchange primitive the ordering algorithm relies on -- the only place commutation

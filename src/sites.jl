@@ -45,12 +45,36 @@ end
 _is_sortable(T) = hasmethod(isless, Tuple{T,T})
 
 """
-    sites(op::AbstractOp)
+    sites(op::AbstractVector{<:Pair})
+    sites(op::AbstractOp) = sites(basis_info(op))
 
 Return a vector of site identifiers where the operator acts.
 """
-sites(o::AbstractOp) = first.(basis_info(o))
-site_dims(o::AbstractOp) = last.(basis_info(o))
+sites(o::AbstractOp) = sites(basis_info(o))
+sites(o::AbstractVector{<:Pair}) = first.(o)
+
+"""
+    sitedims(o::AbstractVector{<:Pair})
+    sitedims(o::AbstractOp) = sitedims(basis_info(o))
+
+Return a vector of local Hilbert space dimensions for each site where the operator acts.
+"""
+sitedims(o::AbstractOp) = sitedims(basis_info(o))
+sitedims(bi::AbstractVector{<:Pair}) = last.(bi)
+
+"""
+    basisdim([T=Int], bi::AbstractVector{<:Pair})
+    basisdim([T=Int], op::AbstractOp) = basisdim([T], basis_info(op))
+
+Return the total dimension of the basis as type `T` for the given operator or basis information.
+"""
+basisdim(T::Type, bi::AbstractVector{<:Pair}) = T(prod(last, bi; init=one(T)))
+basisdim(bi::AbstractVector{<:Pair}) = basisdim(Int, bi)
+basisdim(T::Type, o::AbstractOp) = basisdim(T, basis_info(o))
+basisdim(o::AbstractOp) = basisdim(Int, o)
+
+_positiondict(bi::AbstractVector{<:Pair}) = Dict(s => i for (i, (s, _)) in enumerate(bi))
+_positiondict(op::AbstractOp) = _positiondict(basis_info(op))
 
 """
     mapsites(f, op::AbstractOp)
