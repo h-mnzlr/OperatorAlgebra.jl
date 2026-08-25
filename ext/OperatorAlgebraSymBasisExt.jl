@@ -9,6 +9,11 @@ using SymBasis.Bases
 using LinearAlgebra
 using SparseArrays
 
+_todigitsites(H) = begin
+    pos = OperatorAlgebra._positiondict(H)
+    mapsites(s -> OperatorAlgebra.rawsite(Returns(pos[s]), s), H)
+end
+
 function _apply_op(o::Op, states)
     idx = OperatorAlgebra.rawsite(o.site)
     ldim = size(o.mat, 1)
@@ -21,16 +26,14 @@ function _apply_op(o::Op, states)
             new_s = write(s, idx, j-1)  # j-1 due to conversion from index to bit
             # Accumulate: two input states that differ only at `idx` can be mapped onto the
             # same output state (whenever a row of `o.mat` has more than one entry), and
-            # their contributions have to be summed. This is what makes the intermediate
-            # index of a product of two operators on the same site be summed over.
+            # their contributions have to be summed.
             nstates[new_s] = get(nstates, new_s, zero(valtype(nstates))) + v * ov
         end
     end
     nstates
 end
 function _apply_op(oc::OpChain, states)
-    # OpChain([A, B]) is the matrix product A*B: apply the rightmost factor first,
-    # consistent with apply/atsite/sparse/LinearMap.
+    # OpChain([A, B]) is the matrix product A*B: apply the rightmost factor first.
     for o in reverse(oc.ops)
         states = _apply_op(o, states)
     end
@@ -63,7 +66,8 @@ OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basi
     b = Dict(ba.states .=> eachindex(ba.states))
     vout = complex(zero(v))
 
-    flat = OperatorAlgebra._jw_expand(H, basis_info(H))
+    Hd = _todigitsites(H)
+    flat = OperatorAlgebra._jw_expand(Hd, basis_info(Hd))
 
     for (n, val) in enumerate(v)
         iszero(val) && continue
@@ -85,7 +89,8 @@ OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basi
 end
 
 function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
-    flat = OperatorAlgebra._jw_expand(H, basis_info(H))
+    Hd = _todigitsites(H)
+    flat = OperatorAlgebra._jw_expand(Hd, basis_info(Hd))
     Tel = complex(float(eltype(flat)))
     tol = isnothing(tol) ? sqrt(eps(real(Tel))) : tol
 
@@ -108,7 +113,6 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
 
         for (state2, v) in repr_states
             # `state1` is the state H was applied to, so `v * norm_factor` is <state2|H|state1>
-            # and belongs into row `m`, column `n` -- not the other way around.
             n, m = b[state1], b[state2]
             norm_factor = sqrt(ba.norms[m]/ ba.norms[n])
             push!(I_vec, m)

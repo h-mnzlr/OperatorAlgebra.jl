@@ -243,6 +243,64 @@ const RAISEM = [0 0; 1 0]
         end
     end
 
+    @testset "site identifiers need not be Ints" begin
+        # The extension reads a site as a digit position of the basis state, so it used to
+        # require `Int` sites. Any site type works now: the operator's sites are relabeled to
+        # their `basis_info` positions on the way in, which for 1..N is the identity.
+        for N in (3, 4)
+            bi = refbasis(N)
+            H = heisenberg(N)
+            Hfull = fullmatrix(H, bi)
+
+            symbolic = mapsites(i -> Symbol(:site, i), H)
+            tuples = mapsites(i -> (i, 0), H)
+            @test sitetype(symbolic) == Symbol
+            @test sitetype(tuples) == Tuple{Int,Int}
+
+            for k in 0:(N-1)
+                ba = transbasis(N, k)
+                isempty(ba.states) && continue
+                V = projector(ba, N)
+                reference = V' * Hfull * V
+
+                @test reduced(symbolic, ba) ≈ reference atol = 1e-9
+                @test reduced(tuples, ba) ≈ reference atol = 1e-9
+
+                # ...and through apply! as well
+                v = ComplexF64[cis(0.3i) * (1 + i) for i in 1:length(ba.states)]
+                w = copy(v)
+                OperatorAlgebra.apply!(symbolic, w, ba)
+                @test w ≈ reference * v atol = 1e-9
+            end
+        end
+    end
+
+    @testset "relabeled sites keep their order and their fermion tags" begin
+        # Relabeling maps the k-th site of `basis_info` onto digit k, so a site order that
+        # sorts differently than 1..N must still land on the digits in that same order --
+        # and `fermion` tags have to survive, or the Jordan-Wigner strings would be dropped.
+        N = 4
+        RAISEF4, LOWERF4 = ComplexF64[0 0; 1 0], ComplexF64[0 1; 0 0]
+        H = sum(fermion(Op(RAISEF4, k)) * fermion(Op(LOWERF4, k + 1)) +
+                fermion(Op(RAISEF4, k + 1)) * fermion(Op(LOWERF4, k)) for k in 1:N-1) +
+            fermion(Op(RAISEF4, 1)) * fermion(Op(LOWERF4, N)) +
+            fermion(Op(RAISEF4, N)) * fermion(Op(LOWERF4, 1))
+
+        # relabel to strings, whose sort order is the same as the integers' here
+        renamed = mapsites(s -> OperatorAlgebra.rawsite(k -> "s$k", s), H)
+        @test sitetype(renamed) == OperatorAlgebra.FermionSite{String}
+        @test all(s -> s isa OperatorAlgebra.FermionSite, sites(renamed))
+        @test sort(OperatorAlgebra.rawsite.(sites(renamed))) == ["s1", "s2", "s3", "s4"]
+
+        dofo = dof_object(SpinlessFermion())
+        for n_particles in 0:N
+            sg = sym(TotalSpinlessFermionicNumber(n_particles, N), dofo)
+            ba = basis(dofo, N, sg)
+            isempty(ba.states) && continue
+            @test Matrix(sparse(renamed, ba)) ≈ Matrix(sparse(H, ba)) atol = 1e-9
+        end
+    end
+
     # --- fermionic operators --------------------------------------------------------------
     # `fermion`-tagged sites are resolved by `OperatorAlgebra._jw_expand` before `_apply_op`
     # ever sees them (see the extension source), so the ground truth here is built completely
