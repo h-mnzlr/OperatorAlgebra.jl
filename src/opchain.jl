@@ -83,6 +83,13 @@ Base.:*(oc::OpChain, s::Number) = s * oc
 # expands each factor once instead of re-expanding `oc` for every copy
 _repeated(oc::OpChain, n::Integer) = OpChain{sitetype(oc),eltype(oc)}(repeat(oc.ops, n))
 
+Base.conj(oc::OpChain{Tid,<:Real}) where {Tid} = oc
+Base.conj(oc::OpChain{Tid,Tmat}) where {Tid,Tmat} = OpChain{Tid,Tmat}(AbstractOp[conj(op) for op in oc.ops])
+Base.real(oc::OpChain{Tid,<:Real}) where {Tid} = oc
+Base.real(oc::OpChain) = (oc + conj(oc)) / 2
+Base.complex(oc::OpChain{Tid,<:Complex}) where {Tid} = oc
+Base.complex(oc::OpChain{Tid,Tmat}) where {Tid,Tmat} = OpChain{Tid,complex(Tmat)}(AbstractOp[complex(op) for op in oc.ops])
+
 Base.adjoint(oc::OpChain) = OpChain(AbstractOp[adjoint(op) for op in reverse(oc.ops)])
 Base.transpose(oc::OpChain) = OpChain(AbstractOp[transpose(op) for op in reverse(oc.ops)])
 

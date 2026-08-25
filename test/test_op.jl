@@ -188,6 +188,51 @@ end
     end
 end
 
+@testset "Op Real and Complex Conversion Tests" begin
+    @testset "Real operator is returned unchanged by real" begin
+        op = Op([1 2; 3 4], 1)
+        @test real(op) === op
+
+        float_op = Op([1.0 2.0; 3.0 4.0], :a)
+        @test real(float_op) === float_op
+    end
+
+    @testset "Complex operator is returned unchanged by complex" begin
+        op = Op([1+2im 3; 4 5-im], 1)
+        @test complex(op) === op
+    end
+
+    @testset "real drops the imaginary part, preserving site" begin
+        op_real = real(Op([1+2im 3; 4 5-im], :a))
+
+        @test op_real isa Op{Symbol,Int64}
+        @test op_real.mat == [1 3; 4 5]
+        @test op_real.site == :a
+
+        @test real(Op([1.5+2.5im 0; 0 3.0], 1)) isa Op{Int64,Float64}
+    end
+
+    @testset "complex widens the element type, preserving values and site" begin
+        op_complex = complex(Op([1 2; 3 4], :a))
+
+        @test op_complex isa Op{Symbol,Complex{Int64}}
+        @test op_complex.mat == [1 2; 3 4]
+        @test op_complex.site == :a
+
+        @test complex(Op([1.0 2.0; 3.0 4.0], 1)) isa Op{Int64,ComplexF64}
+    end
+
+    @testset "real after complex returns the original operator" begin
+        op = Op([1 2; 3 4], 1)
+
+        round_trip = real(complex(op))
+
+        @test round_trip isa Op{Int64,Int64}
+        @test round_trip.mat == op.mat
+        @test round_trip.site == op.site
+    end
+end
+
 @testset "Commutator Tests" begin
     @testset "Op-Op commutator on same site uses matrix commutator" begin
         opx = Op([0 1; 1 0], 1)

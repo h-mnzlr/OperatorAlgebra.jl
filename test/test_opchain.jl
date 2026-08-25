@@ -409,6 +409,34 @@ end
     end
 end
 
+@testset "OpChain Real and Complex Conversion Tests" begin
+    @testset "Real chain is returned unchanged by real" begin
+        oc = OpChain(Op([1 0; 0 1], 1), Op([0 1; 1 0], 2))
+        @test real(oc) === oc
+    end
+
+    @testset "Complex chain is returned unchanged by complex" begin
+        oc = OpChain(Op([1+2im 0; 0 3], 1), Op([0 im; 1 0], 2))
+        @test complex(oc) === oc
+    end
+
+    @testset "complex widens every factor, keeping order, sites and values" begin
+        oc_complex = complex(OpChain(Op([1 2; 3 4], 1), Op([5 6; 7 8], 2)))
+
+        @test oc_complex isa OpChain{Int64,Complex{Int64}}
+        @test [op.site for op in oc_complex.ops] == [1, 2]
+        @test oc_complex.ops[1].mat == [1 2; 3 4]
+        @test oc_complex.ops[2].mat == [5 6; 7 8]
+        @test eltype(oc_complex.ops[1].mat) == Complex{Int64}
+    end
+
+    @testset "real takes the real part of the product, not of each factor" begin
+        oc = OpChain(Op([1+2im 0; 0 3], 1), Op([0 im; 1 0], 2))
+
+        @test Array(real(oc)) ≈ real(Array(oc))
+    end
+end
+
 @testset "OpChain empty-vector constructor" begin
     # The empty case cannot infer Tid/Tmat by promotion, so it falls back to Bool,Bool.
     oc = OpChain(AbstractOp[])

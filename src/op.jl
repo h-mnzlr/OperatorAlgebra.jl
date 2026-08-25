@@ -47,6 +47,14 @@ end
 
 Base.:*(A::Op, s::Number) = Op(A.mat * s, A.site)
 Base.:*(s::Number, A::Op) = A * s
+
+Base.conj(A::Op{Tid,<:Real}) where {Tid} = A
+Base.conj(A::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,Tmat}(conj(A.mat), A.site)
+Base.real(A::Op{Tid,<:Real}) where {Tid} = A
+Base.real(A::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,real(Tmat)}(real(A.mat), A.site)
+Base.complex(A::Op{Tid,<:Complex}) where {Tid} = A
+Base.complex(A::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,complex(Tmat)}(complex(A.mat), A.site)
+
 Base.adjoint(A::Op) = Op(adjoint(A.mat), A.site)
 Base.transpose(A::Op) = Op(transpose(A.mat), A.site)
 

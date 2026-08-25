@@ -79,6 +79,13 @@ Base.:+(os1::OpSum, os2::OpSum) = OpSum(vcat(os1.ops, os2.ops))
 Base.:*(s::Number, A::OpSum) = OpSum(AbstractOp[s * op for op in A.ops])
 Base.:*(A::OpSum, s::Number) = OpSum(AbstractOp[op * s for op in A.ops])
 
+Base.conj(os::OpSum{Tid,<:Real}) where {Tid} = os
+Base.conj(os::OpSum{Tid,Tmat}) where {Tid,Tmat} = OpSum{Tid,Tmat}(AbstractOp[conj(op) for op in os.ops])
+Base.real(os::OpSum{Tid,<:Real}) where {Tid} = os
+Base.real(os::OpSum) = OpSum(AbstractOp[real(op) for op in os.ops])
+Base.complex(os::OpSum{Tid,<:Complex}) where {Tid} = os
+Base.complex(os::OpSum{Tid,Tmat}) where {Tid,Tmat} = OpSum{Tid,complex(Tmat)}(AbstractOp[complex(op) for op in os.ops])
+
 Base.adjoint(os::OpSum) = OpSum(AbstractOp[adjoint(op) for op in os.ops])
 Base.transpose(os::OpSum) = OpSum(AbstractOp[transpose(op) for op in os.ops])
 
