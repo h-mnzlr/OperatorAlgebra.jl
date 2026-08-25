@@ -48,8 +48,7 @@ See also: [`Op`](@ref), [`OpSum`](@ref), [`apply`](@ref), `sparse`
 struct OpChain{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}
 
-    # fast path: the vector already has the right parameters and is adopted
-    # without copying or converting, so the caller must not mutate it afterwards
+    # fast path: adopts the vector as-is; callers must not mutate it afterwards
     function OpChain{Tid,Tmat}(ops::Vector{<:AbstractOp{Tid,Tmat}}) where {Tid,Tmat}
         new{Tid,Tmat}(ops)
     end
@@ -79,8 +78,7 @@ Base.:*(s::Number, oc::OpChain) = begin
 end
 Base.:*(oc::OpChain, s::Number) = s * oc
 
-# repeating the factors rather than the chain itself keeps the product flat, so `flattenop`
-# expands each factor once instead of re-expanding `oc` for every copy
+# repeats the factors, not the chain, to keep the product flat
 _repeated(oc::OpChain, n::Integer) = OpChain{sitetype(oc),eltype(oc)}(repeat(oc.ops, n))
 
 Base.conj(oc::OpChain{Tid,<:Real}) where {Tid} = oc

@@ -4,24 +4,15 @@
 
 Extend a single-site operator to the full Hilbert space of a tensor product system.
 
-`bi` is a `site => dim` basis description, as returned by [`basis_info`](@ref) (`sites(op)`
-gives only the site identifiers, not their dimensions, so it is not enough on its own).
+`bi` is a `site => dim` basis description, as returned by [`basis_info`](@ref).
 
-Constructs the full operator by inserting identity-resolution operators at all other
-sites. The matrix is first split into its diagonal ("even") and off-diagonal ("odd")
-parts (for a [`fermion`](@ref)-tagged site, these hold an even/odd number of
-raising/lowering factors respectively). The even part (occupation, identity, ...) is
-embedded with plain identities at every other site -- its strings cancel pairwise. Only
-the odd part (c, c†) picks up strings:
-string ⊗ ... ⊗ string ⊗ odd ⊗ id ⊗ ... ⊗ id
-where, for each other site coming *before* `op.site` in `bi`, `string` is that site's
-[`exchange_string`](@ref) (the ordinary identity for a [`Commuting`](@ref) site, and e.g.
-`PAULI_Z` for a [`fermion`](@ref)-tagged one); sites *after* `op.site` always get plain
-identity padding. Note this split applies to every operator regardless of its own site's
-[`ExchangeStyle`](@ref) -- a bosonic operator sitting among fermionic sites still threads
-their strings, which is what makes chain multiplication of separately-embedded factors
-reproduce the correctly Jordan-Wigner-ordered product. If no site in `bi` is
-[`Fermionic`](@ref) this reduces to plain identity padding and the split is skipped entirely.
+The first site in `bi` is the most significant kron factor. Over a purely
+[`Commuting`](@ref) basis this is plain identity padding at every other site. If `bi`
+contains a [`Fermionic`](@ref) site, the odd (off-diagonal) part of `op.mat` additionally
+picks up that site's [`exchange_string`](@ref) on every site preceding `op.site`, so that
+multiplying separately embedded factors reproduces the Jordan-Wigner-ordered product.
+
+Throws an `ArgumentError` if `op.site` is not in `bi`.
 
 # Arguments
 - `T`: Optional transformation function applied to `op.mat` (e.g., `sparse`)
@@ -65,9 +56,7 @@ function atsite(T, op::Op, bi::AbstractVector{<:Pair})
 
     length(basis) == 1 && return T(op.mat)
 
-    # No Fermionic site anywhere in the basis: every `exchange_string` is the identity, so
-    # the even/odd split is a no-op (even_term() + odd_term() == plain kron of the whole
-    # matrix) and can be skipped outright.
+    # commuting basis: the even/odd split is a no-op, so kron the whole matrix
     _noncommuting_basis(bi) ||
         return kron(I.(dims[1:idx_kron-1])..., T(op.mat), I.(dims[idx_kron+1:end])...)
 

@@ -24,9 +24,8 @@ function _apply_op(o::Op, states)
         for (j, v) in enumerate(o.mat[:, i])
             iszero(v) && continue
             new_s = write(s, idx, j-1)  # j-1 due to conversion from index to bit
-            # Accumulate: two input states that differ only at `idx` can be mapped onto the
-            # same output state (whenever a row of `o.mat` has more than one entry), and
-            # their contributions have to be summed.
+            # accumulate: two input states differing only at `idx` can map onto the same
+            # output state, so their contributions are summed
             nstates[new_s] = get(nstates, new_s, zero(valtype(nstates))) + v * ov
         end
     end
@@ -51,6 +50,7 @@ function _apply_op(os::OpSum, states)
     
     _filter_too_small(nstates)
 end
+
 function _filter_too_small(
     vals_dict::Dict{<:Any,Tv}; cutoff=1e2 * eps(real(Tv))
 ) where {Tv<:Union{AbstractFloat,Complex{<:AbstractFloat}}}
@@ -58,9 +58,7 @@ function _filter_too_small(
     maxval = maximum(abs, values(vals_dict))
     filter(p -> abs(p[2]) > maxval * cutoff, vals_dict)
 end
-function _filter_too_small(vals_dict)
-    vals_dict  # if we do not know the type, we won't filter
-end
+_filter_too_small(vals_dict) = vals_dict  # if we do not know the type, we won't filter
 
 OperatorAlgebra.apply!(H::AbstractOp, v::AbstractVector, ba::SymBasis.Bases.Basis{Ts}) where {Ts} = begin
     b = Dict(ba.states .=> eachindex(ba.states))
@@ -121,8 +119,7 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
         end
     end
 
-    # the size has to be given explicitly: basis states without any matrix element would
-    # otherwise shrink the matrix below the dimension of the basis
+    # the size is given explicitly, so empty rows/columns keep the full basis dimension
     dim = length(ba.states)
     H = sparse(I_vec, J_vec, V_vec, dim, dim)
     if check_hermitian

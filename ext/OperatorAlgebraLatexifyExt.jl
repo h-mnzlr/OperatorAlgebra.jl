@@ -24,9 +24,7 @@ using Latexify
 # Conversion function to create LaTeXStrings from an operator in the latexify interface
 Latexify.latexraw(op::AbstractOp; kwargs...) = Latexify._latexraw(op; kwargs...)
 
-# To allow for integration with the latexify interface we have to define `_latexraw`, rather than `latexraw`, 
-# even though it is bad practice to hook into private methods from other modules. Just defining the
-# `latexraw` function results in `latexify` failing.
+# Hooks `_latexraw` rather than `latexraw`, which `latexify` does not route through.
 Latexify._latexraw(op::Op; kwargs...) = "$(latexraw(op.mat))_{$(latexraw(op.site))}"
 Latexify._latexraw(oc::OpChain; kwargs...) = begin
     prod(op isa OpSum ? "\\left(" * latexraw(op) * "\\right)" : latexraw(op) for op in oc.ops)

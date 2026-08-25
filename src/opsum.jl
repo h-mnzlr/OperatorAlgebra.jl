@@ -46,8 +46,7 @@ See also: [`Op`](@ref), [`OpChain`](@ref), [`apply`](@ref), `sparse`, `LinearMap
 struct OpSum{Tid,Tmat} <: AbstractOp{Tid,Tmat}
     ops::Vector{<:AbstractOp{Tid,Tmat}}
 
-    # fast path: the vector already has the right parameters and is adopted
-    # without copying or converting, so the caller must not mutate it afterwards
+    # fast path: adopts the vector as-is; callers must not mutate it afterwards
     function OpSum{Tid,Tmat}(ops::Vector{<:AbstractOp{Tid,Tmat}}) where {Tid,Tmat}
         new{Tid,Tmat}(ops)
     end

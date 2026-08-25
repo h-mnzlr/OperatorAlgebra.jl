@@ -1,6 +1,6 @@
 using Test
 using SparseArrays
-using OperatorAlgebra: atsite, _terms  # not exported
+using OperatorAlgebra: atsite, _terms, _zero_term, _zero_product_rule, _normalize  # not exported
 
 @info "Testing simplify()..."
 
@@ -242,4 +242,30 @@ end
             end
         end
     end
+end
+
+@testset "Rules on expressions holding no Op" begin
+    empty_sum = OpSum(AbstractOp[])
+    op_free = OpChain(empty_sum, empty_sum)
+
+    @testset "There is no site to build a zero term from" begin
+        @test isnothing(_zero_term(op_free))
+        @test isnothing(_zero_term(empty_sum))
+    end
+
+    @testset "ZeroProductRule declines rather than rewriting" begin
+        @test isempty(_zero_product_rule(op_free))
+    end
+
+    @testset "A zero term is still found through a nested Op" begin
+        @test _zero_term(OpChain(empty_sum, Op([1 0; 0 2], 1))) == Op([0 0; 0 0], 1)
+    end
+end
+
+@testset "Normalization gives up on a rule set with no fixpoint" begin
+    negate(op) = op isa Op ? AbstractOp[-op] : AbstractOp[]
+    op = Op([1 0; 0 2], 1)
+
+    result = @test_logs (:warn, "Normalization did not reach a fixpoint, returning the current expression") _normalize(op, [negate])
+    @test result isa Op
 end

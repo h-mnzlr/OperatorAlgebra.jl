@@ -27,18 +27,8 @@ trades exactness for range, `tr(BigInt, op, bi)` stays exact. `T` applies only t
 dimension bookkeeping and never to the operator's own matrices, so the result type is
 the promotion of `T` with the operator's element type.
 
-The trace factorizes over the tensor structure, `tr(⊗ₛ Mₛ) = ∏ₛ tr(Mₛ)`: each term
-of the operator contributes the product of its per-site traces, with untouched sites
-contributing their dimension (trace of the identity). Consecutive factors on the same
-site are matrix-multiplied in chain order first; this requires the term to already be
-in normal order (same-site factors adjacent, with any exchange signs from
-[`FermionSite`](@ref) sites already folded into the coefficients -- see
-[`normal_order`](@ref)), which is why `tr` normal-orders every term before summing it
-(so e.g. a Jordan-Wigner string of traceless `PAULI_Z` factors correctly zeroes a term).
-Terms over an entirely [`Commuting`](@ref) basis skip that step, since reordering them
-can never introduce a sign. Nested `OpChain`/`OpSum` expressions are supported; note
-that a product of sums is distributed, so its trace costs the product of the sums'
-lengths.
+Nested `OpChain`/`OpSum` expressions are supported. A product of sums is distributed, so
+its trace costs the product of the sums' lengths.
 
 # Example
 ```julia
@@ -60,29 +50,20 @@ LinearAlgebra.tr(::Type{T}, op::AbstractOp, bi::AbstractVector{<:Pair}) where {T
     dims = sitedims(bi)
     pos = _positiondict(bi)
 
-    # Ordering the factors is only needed when exchanging two of them can change the
-    # term's value. If no site in the basis is `FermionSite`, every site's `exchange_phase`
-    # is 1, so `_exchange_factors` is always a plain swap -- no sign, no branching -- and
-    # `_tr` already groups the factors by site in chain order, so normal-ordering leaves
-    # the trace untouched and we skip it. That matters: it is by far the dominant cost of
-    # `tr` on operators with many terms. (This does *not* extend to a basis containing a
-    # `FermionSite`: reordering across it can pick up a sign that `_tr`'s naive per-site
-    # grouping would silently drop, exactly the bug `normal_order` exists to fix.)
+    # factors are ordered only for a basis with a non-commuting site
     flat = flattenop(op)
     if _noncommuting_basis(bi)
         return _tr(T, normal_order(flat, bi), pos, dims)
     end
 
-    # `normal_order` also validates the basis; keep that check when bypassing it,
-    # otherwise a missing site surfaces as a bare `KeyError` from `pos`.
+    # `normal_order` also validates the basis; keep that check when bypassing it
     for s in sites(flat)
         haskey(pos, s) || throw(ArgumentError("Site $s not found in basis"))
     end
     _tr(T, flat, pos, dims)
 end
 
-# `init=one(T)` seeds the identity-dimension product in `T`, so every partial product
-# is formed in `T` -- this is the factor that reaches `prod(dims)` and overflows `Int`
+# `init=one(T)` seeds the identity-dimension product in `T`
 _tr(::Type{T}, op::Op, pos::Dict, dims::AbstractVector) where {T<:Number} = begin
     idx = pos[op.site]
     tr(op.mat) * prod(dims[i] for i in eachindex(dims) if i != idx; init=one(T))
@@ -92,8 +73,7 @@ _tr(::Type{T}, oc::OpChain, pos::Dict, dims::AbstractVector) where {T<:Number} =
     site_prods = Dict{Int,Matrix{eltype(oc)}}()
     for op in oc.ops
         idx = pos[op.site]
-        # seed with the factor itself rather than `I * mat`, which allocates an
-        # identity and burns a matmul for the first factor on every site
+        # seed with the factor itself rather than `I * mat`
         prev = get(site_prods, idx, nothing)
         site_prods[idx] = isnothing(prev) ? op.mat : prev * op.mat
     end

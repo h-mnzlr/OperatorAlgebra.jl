@@ -6,7 +6,7 @@ using OperatorAlgebra
 
 const OA = OperatorAlgebra
 
-# --- reference matrices -------------------------------------------------------
+# reference matrices
 # Spelled out independently of the package constants, so that the tests compare
 # against textbook definitions rather than against the package's own values.
 const REF_ID = ComplexF64[1 0; 0 1]
@@ -21,7 +21,7 @@ const REF_C = ComplexF64[0 1; 0 0]      # LOWER
 const REF_N = ComplexF64[0 0; 0 1]      # OCC_PART
 const REF_HOLE = ComplexF64[1 0; 0 0]   # OCC_HOLE
 
-# --- helpers ------------------------------------------------------------------
+# helpers
 
 """Dense matrix of `op`, over `bi` if given, else over its own `basis_info`."""
 densemat(op, bi) = Matrix(Array(op, bi))

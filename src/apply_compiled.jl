@@ -1,19 +1,7 @@
-# Compiled apply: generate a specialized kernel for one fixed operator.
-#
-# The operator is flattened at "compile" time into a sum of tensor-product terms, each a
-# list of (stride, dim, matrix entries) per involved site. That spec -- a nested tuple of
-# isbits values -- is lifted into the type domain as `Val{spec}`, and a `@generated`
-# function emits a fully unrolled loop nest from it. Since every stride, dimension and
-# matrix element is a literal in the emitted code, Julia's compiler constant-folds them:
-# zero entries disappear, +/-1 factors become plain adds, and same-site products have
-# already been multiplied out symbolically. No `eval` is involved, so there are no
-# world-age issues: the kernel is compiled lazily by dispatch on first call.
+# Compiled apply: generates a specialized kernel for one fixed operator.
 
-# One term as a codegen spec: merge same-site factors by multiplying their matrices in
-# chain order (factors on distinct sites commute -- tagged sites have already had their
-# strings made explicit by `_jw_expand`, so grouping is sound here), then sort by stride
-# so the outermost loop covers the most significant site. Matrices are flattened to
-# column-major NTuples to keep the spec isbits.
+# One term as a codegen spec: same-site factors merged, sorted by stride, matrices flattened
+# to column-major NTuples.
 _term_spec(term::Vector{<:Op}, bi, max_combos) = begin
     merged = Vector{Pair{Any,Matrix}}()
     for f in term
@@ -24,14 +12,8 @@ _term_spec(term::Vector{<:Op}, bi, max_combos) = begin
             merged[i] = first(merged[i]) => last(merged[i]) * f.mat
         end
     end
-    # distributing nested sums can leave same-site factors that multiply out to the
-    # identity (cancelling Jordan-Wigner strings); dropping them keeps the term -- and so
-    # the generated code -- as narrow as possible. This cancellation is not guaranteed in
-    # general: it relies on `exchange_string(s,d)^2 == I`, true for the standard fermionic
-    # phase (-1, an involution) but not for an arbitrary custom `exchange_phase` (see
-    # `_exchange_factors` in simplify.jl for the same phenomenon in `normal_order`) -- a
-    # "local" term on a non-involutory `Fermionic` site can genuinely retain a string
-    # across every preceding site.
+    # drop same-site factors that multiply out to the identity (cancelling Jordan-Wigner
+    # strings), keeping the term as narrow as possible
     filter!(p -> !_isid(last(p)), merged)
 
     factors = map(merged) do (site, mat)
@@ -41,11 +23,7 @@ _term_spec(term::Vector{<:Op}, bi, max_combos) = begin
         (stride, dim, Tuple(mat))
     end
 
-    # Only *dense* (non-diagonal) factors are combinatorially unrolled by the generator
-    # below -- see the module docstring's "diagonal factors" note -- so a long, uncancelled
-    # exchange-string tail (all diagonal) costs only O(width) codegen, not O(2^width). The
-    # `max_combos` guard therefore only needs to bound the dense factors' combination count,
-    # which is what actually gets unrolled.
+    # `max_combos` bounds the dense factors' combination count, which is what gets unrolled
     dense, _ = _partition_diag(factors)
     combos = prod(f[2] for f in dense; init=1)
     combos <= max_combos || throw(ArgumentError(
@@ -60,28 +38,13 @@ _term_spec(term::Vector{<:Op}, bi, max_combos) = begin
     Tuple(factors)
 end
 
-# `_terms` flattens the operator into a sum of products of single-site Ops, preserving chain
-# order and distributing OpSum factors nested inside chains; `Op` keeps the term lists
-# concretely typed for `_term_spec`.
 _apply_spec(op::AbstractOp, bi, max_combos) =
     (basisdim(bi), Tuple(_term_spec(t, bi, max_combos) for t in _terms(op, Op)))
 
-# --- expression generation from a spec --------------------------------------------------
-#
-# A factor's matrix is *diagonal* (e.g. any `exchange_string`, and hence a whole uncancelled
-# Jordan-Wigner tail on a custom, non-involutory `Fermionic` site -- see `_term_spec`
-# above) exactly when its only nonzero entries have `kc[l] == jc[l]`: crossing it never
-# mixes basis states, only rescales them by a value that depends solely on the local digit.
-# The "dense" combo-unrolling below (`_term_body`, `_gather_branch`/`_gather_leaf`) is
-# exponential in the number of *sites*, since it enumerates every (jc, kc) pair to find the
-# matrix's nonzero structure -- necessary for a genuinely dense factor, where that structure
-# can be arbitrary, but wasteful for a diagonal one, whose structure is always "the identity
-# permutation, weighted by one scalar per digit". Diagonal factors are therefore split out
-# and handled by a single O(dim) runtime loop/lookup (`_wrap_diag` for the serial kernel,
-# the `dnames`/`diagvals` runtime lookup in `_gather_leaf` for the threaded one) that
-# contributes a scalar multiplier without ever appearing in the combinatorial enumeration.
-# This is what makes a long uncancelled exchange-string tail cheap to compile regardless of
-# basis size, rather than exponential in it.
+# expression generation from a spec
+
+# Diagonal factors are held out of the combinatorial enumeration and handled by a runtime
+# lookup instead.
 _isdiag(mat::AbstractMatrix) =
     all(iszero(mat[i, j]) for i in axes(mat, 1), j in axes(mat, 2) if i != j)
 
@@ -103,11 +66,8 @@ end
 
 _scaled(c, x) = isone(c) ? x : c == -1 ? :(-$x) : :($c * $x)
 
-# Straight-line body for the *dense* factors of one term at a fixed 0-based index (given by
-# `base_expr`, all involved digits zero there): load the input fiber once, then emit one
-# accumulation per output combo, with the coefficient products evaluated here, at generation
-# time, each optionally scaled by a runtime `scale_expr` (the diagonal factors' contribution,
-# folded in by `_wrap_diag`; `nothing` when there are none, the common case, at zero cost).
+# Straight-line body for the dense factors of one term at the 0-based index `base_expr`,
+# optionally scaled by the runtime `scale_expr`.
 _term_body(dense, base_expr=:base, scale_expr=nothing) = begin
     strides = [f[1] for f in dense]
     mats = [reshape(collect(f[3]), f[2], f[2]) for f in dense]
@@ -137,9 +97,7 @@ _term_body(dense, base_expr=:base, scale_expr=nothing) = begin
     end
 end
 
-# Wraps the dense-only body in one runtime loop per diagonal factor (innermost computes a
-# fresh `base2`/`scale_val` each iteration, so no state is carried between iterations), then
-# hands off to `_term_body`. With no diagonal factors this reduces to plain `_term_body`.
+# Wraps the dense-only body in one runtime loop per diagonal factor.
 _wrap_diag(dense, diag) = begin
     isempty(diag) && return _term_body(dense)
 
@@ -162,10 +120,8 @@ _wrap_diag(dense, diag) = begin
     body
 end
 
-# Loop nest enumerating every `base` index whose digits at the involved sites are zero:
-# one loop per "gap" between involved sites, innermost with unit step (using every site,
-# dense and diagonal alike, to correctly skip untouched space). An empty factor list is the
-# identity term.
+# Loop nest over every `base` index whose digits at the involved sites are zero. An empty
+# factor list is the identity term.
 _term_loops(N, factors) = begin
     m = length(factors)
     m == 0 && return :(@inbounds for base in 0:$(N - 1)
@@ -206,41 +162,18 @@ end
 @generated _apply_kernel!(w::AbstractVector, v::AbstractVector, ::Val{S}) where {S} =
     _kernel_expr(S)
 
-# --- threaded kernel, structured as a GPU-style index kernel ----------------------------
+# threaded kernel
 #
-# The serial kernel above scatters block-local `+=` updates, which cannot be split across
-# threads for terms acting on the most significant sites. The threaded path therefore uses
-# a gather-form kernel instead: each `w[i]` is computed and written exactly once from
-# gathered reads of `v`, so any partition of `1:N` across workers is race-free without
-# locks or barriers. The matrix row needed at index `i` depends on the runtime digits of
-# `i`, so the generator emits a branch tree over the digit values whose leaves are
-# straight-line code with all coefficients and offsets folded to literals.
-#
-# The kernel is deliberately factored the way a GPU kernel is: `_apply_index_kernel!` is a
-# per-output-index "device function" -- one index per unit of work, no shared mutable
-# state, no allocation, isbits spec, `@inbounds` loads/stores, returns `nothing` -- and
-# the CPU merely wraps it in a range loop per task (the `:inline` meta makes that loop
-# compile to the same code as a hand-fused loop body). A CUDA.jl port only needs the usual
-# thread-index prologue around the very same generated body:
-#
-#     function _cuda_kernel!(w, v, ::Val{S}) where {S}
-#         i = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
-#         i <= length(w) && _apply_index_kernel!(w, v, i, Val(S))
-#         return nothing
-#     end
-#
-# (`Threads.@spawn` creates a closure and closures are not allowed inside `@generated`
-# bodies, so the actual task spawning lives in the `CompiledApply` call below.)
+# Gather form: each `w[i]` is written exactly once from gathered reads of `v`.
+# `_apply_index_kernel!` handles one output index; task spawning lives in the `CompiledApply`
+# call below.
 
 _spec_eltype(S) =
     mapreduce(t -> mapreduce(f -> eltype(f[3]), promote_type, t; init=Union{}),
         promote_type, S[2]; init=Union{}) |> T -> T === Union{} ? Bool : T
 
-# Leaf of the branch tree over *dense* factors: their digits are fixed, so every matrix row
-# entry and input offset is a literal. `diag`/`diag_dnames` are the diagonal factors held out
-# of the branch tree (see the "diagonal factors" note above `_isdiag`); their contribution is
-# a runtime scalar lookup (`dname + 1`-th entry of their materialized diagonal-values tuple)
-# multiplying the whole leaf, at O(1) codegen cost per diagonal factor instead of O(dim).
+# Leaf of the branch tree over dense factors, with `diag`/`diag_dnames` contributing a
+# runtime scalar lookup that multiplies the whole leaf.
 _gather_leaf(dense, dense_mats, digits, diag, diag_dnames) = begin
     combos = vec(collect(Iterators.product((0:f[2]-1 for f in dense)...)))
     summands = Union{Expr,Symbol}[]
@@ -273,9 +206,7 @@ _gather_branch(dense, dense_mats, dnames, digits, diag, diag_dnames) = begin
 end
 
 # One term's contribution to the accumulator at index `i`: extract the digits of every
-# involved site (constant divisors, strength-reduced by the compiler; needed for both dense
-# sites, to select a branch, and diagonal ones, to index their lookup table), then branch
-# over the dense sites only -- see the "diagonal factors" note above `_isdiag`.
+# involved site, then branch over the dense sites.
 _term_gather(factors, tidx) = begin
     isempty(factors) && return :(acc += v[i])
     dnames = [Symbol(:d, tidx, :_, l) for l in eachindex(factors)]
@@ -322,22 +253,15 @@ _chunks(N, nchunks) = begin
     [(bounds[k] + 1, bounds[k+1]) for k in 1:nchunks]
 end
 
-# --- public interface -------------------------------------------------------------------
+# public interface
 #
-# Two distinct callable types, deliberately not one dual-purpose object, mirroring the
-# apply/apply! split: `CompiledApply` (from `compile_apply`) only ever allocates, exactly
-# like `apply`; `CompiledApplyInPlace` (from `compile_apply!`) only ever writes into a
-# caller-supplied buffer, exactly like `apply!`. Calling one with the other's arity is a
-# `MethodError`, not a confusing but "working" mismatch -- e.g. `compile_apply(...)(w, v)`
-# no longer silently behaves like the in-place form, because that method doesn't exist on
-# `CompiledApply` at all. Both share the same spec-building (`_compile_spec`) and kernel
-# dispatch (`_run_kernel!`); only the public call signature differs.
+# `CompiledApply` (from `compile_apply`) allocates; `CompiledApplyInPlace` (from
+# `compile_apply!`) writes into a caller-supplied buffer.
 
 _compile_spec(op::AbstractOp, bi, threads::Integer, max_combos::Integer) = begin
     threads >= 1 || throw(ArgumentError("threads must be at least 1, got $threads."))
     max_combos >= 1 || throw(ArgumentError("max_combos must be at least 1, got $max_combos."))
-    # tagged sites are resolved into explicit string factors first, after which every term
-    # is an ordinary tensor product and the spec builder below applies unchanged
+    # tagged sites are resolved into explicit string factors first
     spec = _apply_spec(_jw_expand(op, bi), bi, max_combos)
     isbits(spec) || throw(ArgumentError(
         "compile_apply requires isbits matrix elements (e.g. Float64 or ComplexF64) to lift the operator into the type domain."))
@@ -371,41 +295,22 @@ Returns a callable `c` with one method, `c(v)`, which allocates and returns a ne
 with the element type promoted as needed -- mirroring [`apply`](@ref). See
 [`compile_apply!`](@ref) for the in-place counterpart, `c!(w, v)`, mirroring [`apply!`](@ref).
 
-The operator is expanded into tensor-product terms, same-site factors are multiplied out
-symbolically, and the result is baked into a `@generated` function: every stride, local
-dimension and matrix element appears as a compile-time constant in the emitted code, so
-Julia's compiler unrolls the local updates, drops zero matrix elements and folds ±1
-factors. The kernel is compiled on first call and reused afterwards, so this pays off
-when the same operator is applied many times (e.g. inside an iterative solver).
+The kernel is compiled on first call and reused afterwards, so this pays off when the same
+operator is applied many times, e.g. inside an iterative solver. Sites with a
+[`Fermionic`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are supported.
 
-`threads` selects how many tasks the application is split into (baked into the returned
-callable; default: all threads of the Julia process). With `threads = 1` a serial
-scatter-form kernel is generated; with `threads > 1` a gather-form kernel writes each
-output entry exactly once, so the index range is partitioned across tasks without any
-synchronization. Threading pays off for large Hilbert spaces; for small ones the task
-overhead dominates, so prefer `threads = 1` there.
+# Arguments
+- `bi`: `site => dim` pairs defining the system, e.g. `basis_info(op)`.
+- `threads`: number of tasks the application is split into, baked into the returned
+  callable. Threading pays off for large Hilbert spaces; for small ones the task overhead
+  dominates, so prefer `threads = 1` there.
+- `max_combos`: cap on the number of combinations generated per term. Terms wider than this
+  raise an `ArgumentError`; either raise the cap (compilation gets slow and memory-hungry)
+  or use [`apply`](@ref)/[`apply!`](@ref), which have no term-width cost.
 
-Sites with a [`Fermionic`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are
-supported: their string factors are resolved into ordinary tensor-product terms before
-codegen, so a Jordan-Wigner tail simply becomes extra sites in a term. Diagonal factors
-(every `exchange_string` is diagonal) are handled by a runtime scalar lookup rather than
-being combinatorially unrolled, so a long tail is cheap regardless of how it arose: for the
-standard fermionic phase (`-1`, self-inverse), strings shared by two factors of the same
-chain cancel outright, so e.g. a hopping term `c†(k)*c(k+1)` collapses back down to 2 sites
-regardless of how far `k` is from the edge of the basis; for a custom [`exchange_phase`](@ref)
-that isn't its own inverse (anything other than `±1`), that cancellation doesn't happen and
-a "local"-looking term can genuinely retain a string across every preceding site (the
-operator itself has that much support), but those sites stay cheap to compile either way.
-Only genuinely *dense* (non-diagonal) sites are combinatorially unrolled, and codegen is
-exponential in their count -- `max_combos` caps that count and raises a clear
-`ArgumentError` above it, rather than silently attempting to generate and compile an
-enormous kernel. If you hit that error and actually need the wide dense term, either raise
-`max_combos` (compilation will be slow and memory-hungry) or use [`apply`](@ref)/
-[`apply!`](@ref) instead, which have no term-width cost.
-
-Matrix elements must be isbits (e.g. `Float64`, `ComplexF64`). The generated code also grows
-with the local dimensions and the number of non-zero matrix elements, so it is intended for
-the usual case of small local matrices.
+Matrix elements must be isbits (e.g. `Float64`, `ComplexF64`). Generated code grows with the
+local dimensions and the number of non-zero matrix elements, so this is intended for the
+usual case of small local matrices.
 
 # Examples
 ```julia

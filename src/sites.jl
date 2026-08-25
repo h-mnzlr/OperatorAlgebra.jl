@@ -21,7 +21,7 @@ _check_consistent_basis_info(site_and_dim; should_throw=true) = begin
         should_throw && throw(DimensionMismatch("Unable to obtain basis information due to incompatible dimension at site $s: $dtest incompatible with $dim."))
         return false
     end
-    true
+    return true
 end
 
 basis_info(oc::Union{OpChain,OpSum}) =  begin
@@ -117,8 +117,6 @@ fermion(1) == 1           # false
 # Interface
 Subtypes must implement:
 - `rawsite(s)`: the underlying plain site identifier
-- [`rawsite`](@ref)`(f, s)`: `s` with its raw identifier mapped through `f`. Only needed for
-  a site carrying data besides the identifier; otherwise `T(f(rawsite(s)))` is the default.
 
 A subtype is [`Fermionic`](@ref) by default. One with different (or no) special statistics
 overrides [`exchange_style`](@ref), [`site_parity`](@ref) and/or [`exchange_phase`](@ref).

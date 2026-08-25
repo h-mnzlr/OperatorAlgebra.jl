@@ -322,6 +322,11 @@ end
         @test complex(os) === os
     end
 
+    @testset "Real sum is returned unchanged by conj" begin
+        os = OpSum(Op([1 0; 0 1], 1), Op([0 1; 1 0], 2))
+        @test conj(os) === os
+    end
+
     @testset "real applies to every term, preserving sites and order" begin
         os_real = real(OpSum(Op([1+2im 3; 4 5-im], 1), Op([6 7im; 8-im 9], 2)))
 
@@ -340,9 +345,23 @@ end
         @test [op.site for op in os_complex.ops] == [1, 2]
     end
 
+    @testset "conj applies to every term, preserving sites and order" begin
+        os_conj = conj(OpSum(Op([1+2im 3; 4 5-im], 1), Op([6 7im; 8-im 9], 2)))
+
+        @test os_conj isa OpSum{Int64,Complex{Int64}}
+        @test os_conj.ops[1].mat == [1-2im 3; 4 5+im]
+        @test os_conj.ops[2].mat == [6 -7im; 8+im 9]
+        @test [op.site for op in os_conj.ops] == [1, 2]
+    end
+
     @testset "real of a sum is the real part of its full matrix" begin
         os = OpSum(Op([1+2im 0; 0 3], 1), Op([0 im; 1 0], 2))
         @test Array(real(os)) == real(Array(os))
+    end
+
+    @testset "conj of a sum is the conjugate of its full matrix" begin
+        os = OpSum(Op([1+2im 0; 0 3], 1), Op([0 im; 1 0], 2))
+        @test Array(conj(os)) == conj(Array(os))
     end
 end
 

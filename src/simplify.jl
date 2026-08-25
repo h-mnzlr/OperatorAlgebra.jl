@@ -3,22 +3,29 @@ using DataStructures
 """
     simplify(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1)
 
-Return a simplified version of the operator, e.g., by merging terms acting on the same sites. After the simplification the operator is also flattened,
-meaning that there is only a single top-level `OpSum` operator and all `OpChain` operators only contain `Op` operators.
+Return a simplified, flattened version of the operator: a single top-level [`OpSum`](@ref)
+whose [`OpChain`](@ref) terms contain only [`Op`](@ref) factors.
 
-Specifically, two `Op` operators get simplified if they act on the same site, by merging their matrices. For `OpChain` operators, all consecutive factors acting on the same site get merged according to the semantics of `OpChain` (i.e., `OpChain([A, B])` is the matrix product `A*B`, so the rightmost factor acts on a state first), but not when there are operators in-between because those might be subject to commutation relations (like fermions).
-For `OpSum` operators, all terms (single-site and multiple-site) get merged by summing their matrices only when all sites are the same.
+Two [`Op`](@ref)s on the same site are merged into one matrix. Consecutive same-site factors
+of an [`OpChain`](@ref) are merged in chain order, but not across an intervening factor on
+another site. [`OpSum`](@ref) terms are merged only when they act on exactly the same sites.
+Factoring such as `A*B + A*C -> A*(B + C)` is applied where it shortens the expression.
 
-The simplification is driven by rewrite rules (see the rule interface below) in two
-stages: the always-improving `NORMALIZING_RULES` are applied greedily to a fixpoint,
-then the heuristic `SEARCH_RULES` (factoring, e.g. `A*B + A*C -> A*(B + C)`) are
-explored with a best-first search guided by `_scoring_function`, deduplicating
-structurally equal expressions. `nsteps` bounds the number of search expansions,
-`tablesize` the number of candidate expressions kept in the search frontier.
+# Arguments
+- `nsteps`: maximum number of search steps.
+- `tablesize`: number of candidate expressions kept while searching.
+- `verbosity`: `1` prints search progress to `stderr`, `0` is silent.
+
+# Examples
+```julia
+simplify(Op([1 0; 0 2], 1) * Op([2 0; 0 1], 1))   # merged into a single Op
+simplify(Op(PAULI_X, 1) + Op(PAULI_Z, 1))         # merged into a single Op
+```
+
+See also: [`flattenop`](@ref), [`normal_order`](@ref)
 """
 simplify(op::AbstractOp; kwargs...) = _simplify_main_loop(op; kwargs...)
 
-# These shall be integers!
 const _SCORING_SUM_PENALTY = 1
 const _SCORING_CHAIN_PENALTY = 1
 const _SCORING_OPDIM_PENALTY = 1
@@ -32,7 +39,7 @@ _scoring_function(v::Number) = Int(v != false) * _SCORING_NONZERO_PENALTY
 _scoring_function(v::Complex) = _scoring_function(real(v)) + _scoring_function(imag(v)) + _SCORING_COMPLEX_PENALTY
 _scoring_function(v) = 1  # generic fallback
 
-# --- helpers shared by the rules ----------------------------------------------
+# helpers shared by the rules
 
 # A zero single-site operator matrix-equivalent to the (zero) expression `op`,
 # or `nothing` if `op` contains no `Op` to take a site from.
@@ -60,22 +67,16 @@ _scalar_factor(mat1, mat2) = begin
     end
 end
 
-# --- rules ---------------------------------------------------------------------
 # Every rule implements the unified interface
 #
 #     _some_rule(op::AbstractOp) -> Vector{AbstractOp}
 #
-# returning every expression obtainable by applying the rule exactly once to the
-# top node of `op` (only `_recursive_transform_rule` lifts rules into nested
-# subexpressions). Each returned expression must be matrix-equivalent to `op` and
-# structurally different from it, and each rule must provide a generic fallback
-# method returning an empty `AbstractOp[]`.
+# returning every expression obtainable by applying the rule exactly once to the top node of
+# `op`. Each returned expression must be matrix-equivalent to `op` and structurally different
+# from it, and each rule must provide a generic fallback method returning `AbstractOp[]`.
 #
-# Rules are grouped into two sets:
-#  - `NORMALIZING_RULES` never increase the score, so the engine applies them
-#    greedily to a fixpoint instead of searching over them.
-#  - `SEARCH_RULES` are heuristic (different applications exclude each other), so
-#    the engine explores them with a scored best-first search.
+# `NORMALIZING_RULES` never increase the score and are applied greedily to a fixpoint.
+# `SEARCH_RULES` are heuristic and are explored with a scored best-first search.
 
 # FlattenSumRule flattens one nested OpSum term into its parent OpSum.
 _flatten_sum_rule(_) = AbstractOp[]
@@ -249,8 +250,7 @@ _associativity_right_rule(os::OpSum) = begin
     trafod_ops
 end
 
-# RecursiveTransformRule lifts the search rules into nested subexpressions: it
-# returns the parent expression with one child replaced by one of its rewrites.
+# RecursiveTransformRule returns the parent expression with one child replaced by a rewrite.
 _recursive_transform_rule(_) = AbstractOp[]
 _recursive_transform_rule(os::Top) where {Top<:Union{OpSum,OpChain}} = begin
     trafod_ops = AbstractOp[]
@@ -278,10 +278,8 @@ const EXPANDING_RULES = (NORMALIZING_RULES..., _distribute_rule)
 const SEARCH_RULES = (_associativity_left_rule, _associativity_right_rule)
 const ALL_SEARCH_RULES = (SEARCH_RULES..., _recursive_transform_rule)
 
-# --- greedy rewriting engine ----------------------------------------------------
-# Applies a set of rules bottom-up until no rule matches anymore. `known` is an
-# optional identity-keyed cache of expressions already in normal form w.r.t.
-# `rules`; since rewrites share unchanged subterms, this avoids rescanning them.
+# greedy rewriting engine
+# Applies rules bottom-up to a fixpoint. `known` caches expressions already in normal form.
 
 function _normalize(op::AbstractOp, rules; known=nothing)
     isnothing(known) || !haskey(known, op) || return op
@@ -318,10 +316,7 @@ function _normalize_children(op::Top, rules; known=nothing) where {Top<:Union{Op
     isnothing(newops) ? op : Top.name.wrapper(newops)
 end
 
-# --- best-first search over the search rules -------------------------------------
-
-# Structural hash used to deduplicate expressions during the search. Sums are
-# hashed order-insensitively so that permuted-but-equal sums collapse to one state.
+# Structural hash used to deduplicate search states; sums hash order-insensitively.
 const _EKEY_OP_SALT = 0x2d1c9f5a63b8e047 % UInt
 const _EKEY_CHAIN_SALT = 0x7be0c3a591f2d846 % UInt
 const _EKEY_SUM_SALT = 0x94d0b8a7c15e3f62 % UInt
@@ -342,9 +337,7 @@ _ekey(os::OpSum) = begin
     hash(s, _EKEY_SUM_SALT)
 end
 
-# Score and key of a search state (a normalized expression). Both are assembled
-# from identity-keyed per-term caches: a rewrite shares all top-level terms with
-# its parent except the one it changed, so only that term is ever recomputed.
+# Score and key of a search state, cached per term.
 _state_score(op::AbstractOp, cache) = get!(() -> _scoring_function(op), cache, op)
 _state_score(os::OpSum, cache) =
     sum(get!(() -> _scoring_function(o), cache, o) for o in os.ops; init=0) + length(os.ops) * _SCORING_SUM_PENALTY
@@ -358,17 +351,13 @@ _simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = beg
     score_cache = IdDict{Any,Int}()
     key_cache = IdDict{Any,UInt}()
 
-    # Seed with both the fully expanded form and the merely shrunk form, so an
-    # input that is already better factored than the search could recover is kept.
+    # seed with both the fully expanded form and the merely shrunk form
     shrunk = _normalize(op, NORMALIZING_RULES; known)
     expanded = _normalize(_normalize(shrunk, EXPANDING_RULES), NORMALIZING_RULES; known)
     seeds = AbstractOp[expanded]
     _state_key(shrunk, key_cache) == _state_key(expanded, key_cache) || push!(seeds, shrunk)
 
-    # The search table holds the retained states sorted by score. Expanded states
-    # stay in the table (flagged via the Ref), so they keep occupying table slots;
-    # once every retained state has been expanded the search has converged and
-    # stops, even if `nsteps` is not exhausted.
+    # retained states sorted by score; the Ref flags an expanded one
     table = SortedMultiDict{Int,Tuple{AbstractOp,Ref{Bool}}}()
     seen = Set{UInt}()
     for s in seeds
@@ -377,13 +366,8 @@ _simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = beg
     end
     best_score, (best, _) = first(table)
 
-    # Any-good search: rather than exhausting every candidate rewrite of a state to
-    # find the best one among them, take the first rewrite found to improve on
-    # `best_score`, drop it into the table, and restart from there right away (i.e.
-    # the next state picked for expansion is, by construction, the just-found one
-    # unless something even better is already sitting in the table). Only when a
-    # state's candidates run out without an improvement does the search fall
-    # through to pick the next-best unexpanded state instead.
+    # take the first rewrite improving on `best_score` and restart from it; on no
+    # improvement, fall through to the next-best unexpanded state
     step = 0
     @label restart
     step += 1
@@ -405,12 +389,7 @@ _simplify_main_loop(op::AbstractOp; nsteps=50, tablesize=100, verbosity=1) = beg
     isnothing(st) && @goto converged
     verbosity >= 1 && println(stderr, "Simplification step $step, table size: $(length(table)), best score: $best_score\r")
 
-    # `st_checked` is only flipped to `true` once the loop below runs to completion,
-    # i.e. every candidate rewrite of `st` was generated without finding an
-    # improvement. Breaking out early (the `@goto restart` below) leaves it `false`,
-    # so `st` remains eligible to be picked again later and get the rest of its
-    # candidates explored -- it must never be marked fully exhausted just because we
-    # stopped looking at it early.
+    # `st_checked` flips to `true` only once the loop below runs to completion
     for rule in ALL_SEARCH_RULES, raw in rule(st)
         cand = _normalize(raw, NORMALIZING_RULES; known)
 
@@ -444,31 +423,22 @@ Return `op` with the factors of each product reordered to follow the site order 
 `site => dim` basis description as returned by [`basis_info`](@ref). Called without `bi`,
 the basis is derived from the operator itself, exactly as for `sparse`/`Array`.
 
-A factor moving past a [`Commuting`](@ref) site (the default for any untagged/bosonic site)
-commutes freely, so factors are stably sorted by basis position without picking up any
-signs. Moving a factor past a [`Fermionic`](@ref) site conjugates *that site's own*
-factor by the site's [`exchange_string`](@ref): entries connecting two basis states of the
-same [`site_parity`](@ref) (in particular the whole diagonal) pass through untouched, and
-entries connecting different parities pick up [`exchange_phase`](@ref) λ or `1/λ`, depending
-on direction; the moving factor is split too (into a part that commutes freely and a part
-that triggers this conjugation), but contributes no phase of its own, since which site is
-doing the crossing never matters, only which site is being crossed. This recovers, for two
-fermionic sites (λ = -1, self-inverse), `{c_i, c_j} = 0` for `i ≠ j`, holding at the operator
-level so no Jordan-Wigner strings enter here (those belong to [`atsite`](@ref)'s embedding,
-not to this same-position reordering): e.g. `c2 * c1` normal-orders to `(-c1) * c2`; even
-factors (`n`, `1-n`, identity) commute freely with everything. When both exchanged factors
-mix even and odd parts the product no longer factors, and the chain branches into an
-[`OpSum`](@ref) of chains, each ordered further. A custom site type gets this for free by
-implementing [`ExchangeStyle`](@ref): declare `exchange_style(::MySite) = Fermionic()`
-and (optionally) override `exchange_phase`/`site_parity` for anything beyond the fermionic
-default.
+Factors on [`Commuting`](@ref) sites (the default for any untagged site) are sorted freely.
+Factors on [`Fermionic`](@ref) sites pick up the corresponding [`exchange_phase`](@ref), so
+`c2 * c1` normal-orders to `(-c1) * c2`, while even factors (`n`, `1-n`, identity) commute
+with everything. A custom site type gets this by declaring
+`exchange_style(::MySite) = Fermionic()` and optionally overriding
+[`exchange_phase`](@ref)/[`site_parity`](@ref).
 
-Factors on the same site do not commute in general and keep their chain order; they
-are left as separate adjacent factors -- follow with [`simplify`](@ref) to merge
-them. A nested `OpChain`/`OpSum` factor is normal-ordered in place but acts as a
-barrier that no factor is sorted across, since it may share sites with its
-neighbors. The terms of an [`OpSum`](@ref) are each normal-ordered and then sorted
-by the sites they act on.
+When both exchanged factors mix even and odd parts, the result is an [`OpSum`](@ref) of
+ordered chains rather than a single chain.
+
+Factors on the same site keep their chain order and are left as separate adjacent factors --
+follow with [`simplify`](@ref) to merge them. A nested `OpChain`/`OpSum` factor is
+normal-ordered in place but acts as a barrier that no factor is sorted across. The terms of
+an [`OpSum`](@ref) are each normal-ordered and then sorted by the sites they act on.
+
+Throws an `ArgumentError` if `op` touches a site that is not in `bi`.
 
 Normal ordering never changes the operator, only how it is written:
 
@@ -502,38 +472,10 @@ normal_order(op::AbstractOp, bi::AbstractVector{<:Pair}) = begin
     _normal_order(op, pos)
 end
 
-# The exchange primitive the ordering algorithm relies on -- the only place commutation
-# rules enter. `_exchange_factors` is called on `(A, B) = (ops[i], ops[i+1])` exactly when
-# they're out of order, i.e. A sits at a *higher* basis position than B (A needs to end up on
-# the right). It must return (B'_k, A'_k) pairs such that the chain [B'_k, A'_k] -- when
-# LATER embedded by the ordinary `atsite`, exactly as any other chain -- reproduces `A * B`.
-# That "later, ordinary embedding" is the crux: `A'_k` (built from A's own site) picks up its
-# OWN exchange_string from B's site automatically, the same as any operator does when it sits
-# after a Fermionic site, so B'_k must already be *conjugated* to compensate:
+# Exchanges an out-of-order adjacent pair `(A, B)`, returning (B'_k, A'_k) pairs whose chain
+# reproduces `A * B` once embedded by `atsite`:
 #
 #     A * B = B * A_even  +  (S B_odd S⁻¹) * A_odd,   S = exchange_string(B.site, dim)
-#
-# Entrywise, conjugation by the diagonal S = diagm(λ.^p) (p = site_parity(B.site,dim),
-# λ = exchange_phase(B.site)) is `B[i,j] * λ^(p[i]-p[j])`: unchanged on the diagonal and
-# same-parity entries (λ^0 = 1, so B_even passes through untouched, hence no need to add it
-# back separately), and rescaled by λ or 1/λ on the two off-diagonal directions between a
-# lower- and higher-parity index. λ == 1 (B's site is `Commuting`, or `Fermionic` with a
-# trivial phase override) needs no split at all -- a plain swap is exact and cheap, the common
-# case for most chains.
-#
-# A previous version of this used the much simpler-looking `B_even + λ B_odd` (scaling *all*
-# of B_odd by the same λ, not conjugating). That is WRONG in general -- it silently canceled
-# out to the right answer only for the historically sole tested case, λ = -1 with a purely
-# 2-index parity, because conjugation by an involution (S = S⁻¹) happens to coincide with a
-# uniform λ-scaling there. It was invisible to extensive fermionic (λ = -1) testing and broke
-# immediately for any other `exchange_phase`, e.g. a custom site with `im` or a genuine
-# complex phase -- a cautionary example for why a "verified" formula still needs testing away
-# from the one concrete instance (FermionSite) that motivated it.
-#
-# `1/λ` is computed via `inv`, which promotes an exact `Int` λ = -1 to `Float64` (Julia's `^`
-# and `inv` do not special-case that `-1` is its own exact inverse) -- special-cased to keep
-# the common fermionic case free of unnecessary float promotion, matching `_parity_split`'s
-# same exactness goal.
 _exchange_factors(A::Op, B::Op) = begin
     λ = exchange_phase(B.site)
     isone(λ) && return Tuple{Op,Op}[(B, A)]
@@ -546,15 +488,9 @@ end
 
 _phasepow(λ, invλ, k::Integer) = k == 0 ? one(λ) : k == 1 ? λ : k == -1 ? invλ : λ^k
 
-# Chains are ordered by a stepping algorithm: resolve the first out-of-order
-# adjacent pair of single-site factors with `_exchange_factors`, repeat until no
-# pair is out of order -- the ordered fixpoint. The steps are adjacent
-# transpositions, so factors on the same site keep their chain order. An exchange
-# that does not factor back into a single product branches the chain into one
-# chain per pair, each stepped further, dropping zero branches immediately. Nested
-# OpSum/OpChain factors are barriers -- pairs containing one never swap. Every
-# swap removes one inversion in each branch, so the fixpoint is reached after
-# finitely many steps.
+# Resolves the first out-of-order adjacent pair with `_exchange_factors` and repeats until
+# none is left. An exchange that does not factor back into a single product branches the
+# chain; zero branches are dropped. Nested OpSum/OpChain factors are barriers.
 _normal_order(o::Op, pos) = o
 
 function _normal_order(oc::OpChain, pos)
@@ -606,7 +542,7 @@ produces (see `_optype_simplification_rule`).
 
 Products of sums are distributed, `(A + B) * C == A * C + B * C`, so a chain with
 nested sums expands into the product of those sums' lengths in terms. Factor order
-within each chain is preserved, as required for non-commuting operators.
+within each chain is preserved.
 
 # Example
 ```julia

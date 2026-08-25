@@ -44,7 +44,7 @@ const RAISEM = [0 0; 1 0]
     using SymBasis
     using SymBasis.DoFObjects, SymBasis.Bases, SymBasis.DigitBase, SymBasis.SymGroups
 
-    # --- reference construction (independent of the extension) --------------------------
+    # reference construction (independent of the extension)
 
     # `bi` convention: site 1 is the least significant BaseInt digit, i.e. the *last* kron
     # factor, so the basis description runs from site N down to site 1.
@@ -94,7 +94,7 @@ const RAISEM = [0 0; 1 0]
         basis(dofo, N, sg; is_sorted=true)
     end
 
-    # --- model Hamiltonians -------------------------------------------------------------
+    # model Hamiltonians
     # Built from floating-point matrices, which is the ordinary case; integer matrices (a
     # past source of element-type bugs) are covered separately under "regressions".
 
@@ -301,7 +301,7 @@ const RAISEM = [0 0; 1 0]
         end
     end
 
-    # --- fermionic operators --------------------------------------------------------------
+    # fermionic operators
     # `fermion`-tagged sites are resolved by `OperatorAlgebra._jw_expand` before `_apply_op`
     # ever sees them (see the extension source), so the ground truth here is built completely
     # independently of that machinery: `fullmat_fermion_op` implements the textbook
@@ -379,7 +379,7 @@ const RAISEM = [0 0; 1 0]
         end
     end
 
-    # --- regressions ---------------------------------------------------------------------
+    # regressions
     # Both of these were real defects, found by these tests and since fixed. They only ever
     # show up when a symmetry phase is *not* a Gaussian integer: at N = 4 every translational
     # phase is ±1 or ±i and both bugs stay invisible, so these tests deliberately use N = 3
@@ -405,6 +405,30 @@ const RAISEM = [0 0; 1 0]
             # `tol` default is evaluated on every call, even with the check switched off,
             # and `eps` has no method for an integer type.
             @test sparse(H, ba) isa SparseMatrixCSC
+        end
+
+        @testset "an integer state vector is applied without filtering" begin
+            # Amplitudes below a relative `eps` cutoff are pruned while applying an OpSum,
+            # which only means anything for floating-point values; an integer-valued state
+            # dictionary takes the unfiltered fallback instead. `apply!` seeds that
+            # dictionary from `v`, so an integer `v` is what selects it -- `sparse` never
+            # does, since it floats its element type first. The operator has to be diagonal:
+            # off-diagonal terms pull in irrational norm factors no integer vector can hold.
+            N = 4
+            ba = transbasis(N, 0)
+            H = bond(N, PZ, PZ)
+            @test eltype(H) <: Integer
+
+            M = reduced(H, ba)
+            ref = M * [i for i in eachindex(ba.states)]
+
+            w = Int[i for i in eachindex(ba.states)]
+            OperatorAlgebra.apply!(H, w, ba)
+            @test w ≈ ref atol = 1e-9
+
+            wc = Complex{Int}[i for i in eachindex(ba.states)]
+            OperatorAlgebra.apply!(H, wc, ba)
+            @test wc ≈ ref atol = 1e-9
         end
 
         @testset "hermiticity guard tolerates rounding noise" begin

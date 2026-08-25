@@ -1,8 +1,6 @@
-# Basis-state indexing: `bi` is a `site => dim` vector as returned by `basis_info`, with
-# the first site as the leftmost (most significant) kron factor, matching `atsite`. A
-# 1-based full-space index `i` therefore decomposes into 0-based local digits `d_k` via
+# Basis-state indexing: the first site of `bi` is the most significant kron factor, so a
+# 1-based index `i` decomposes into 0-based local digits `d_k` via
 #     i - 1 = sum(d_k * stride_k),   stride_k = prod(dims[k+1:end])
-# so that `apply(op, i, bi)` reproduces column `i` of `atsite(op, bi)`.
 
 _stride_and_dim(site, bi) = begin
     idx = findfirst(p -> isequal(first(p), site), bi)
@@ -11,38 +9,21 @@ _stride_and_dim(site, bi) = begin
     stride, last(bi[idx])
 end
 
-# --- resolving non-commuting sites --------------------------------------------------------
+# resolving non-commuting sites
 #
-# Everything below this point implements plain tensor-product semantics: a factor `Op(m, s)`
-# acts as `m` on `s` and as the identity everywhere else. A basis containing a `Fermionic`
-# site (see `ExchangeStyle` in sites.jl) does not obey that -- operators pick up string
-# factors on the *other* sites -- so the operator is rewritten into an equivalent expression
-# whose factors are all plain, using exactly the decomposition `atsite` uses:
+# Everything below implements plain tensor-product semantics: `Op(m, s)` acts as `m` on `s`
+# and as the identity elsewhere. In a basis containing a `Fermionic` site the operator is
+# first rewritten into plain factors:
 #
 #     m = even + odd                                   (diagonal / off-diagonal part)
 #     m at site k  ==  even at k  +  (∏_{j<k} string_j) ⊗ odd_k ⊗ (∏_{j>k} id_j)
-#
-# The even part commutes past every string and needs no padding; only the odd part picks up
-# strings. Note the split is on the *matrix*, not on the site's own style: an odd matrix on a
-# `Commuting` site still drags the strings of `Fermionic` sites around it, which is why the
-# rewrite keys off `bi` containing a `Fermionic` site rather than off the operator's own
-# sites (see `_parity_split` in sites.jl for why). Identity string factors are dropped, so a
-# fermionic term keeps just its Jordan-Wigner tail.
-#
-# The rewrite reuses the original site identifiers, so it never has to invent names or worry
-# about a `Fermionic` and a `Commuting` site sharing a raw identifier. Because `atsite` of
-# a chain is the product of the factors' `atsite`s, expanding each factor independently is
-# exact for nested chains and sums alike.
 _isid(m) = size(m, 1) == size(m, 2) && m == I
 
-# NOTE: the expansion keeps the original site identifiers, so `bi` still looks non-commuting
-# to its own output and expanding twice would emit a second set of strings. Call it exactly
-# once, at a public entry point, and pass the result only to `_apply!` / `_apply_index` --
-# never back through `apply`/`apply!`.
+# NOTE: call exactly once, at a public entry point; pass the result only to `_apply!` /
+# `_apply_index`, never back through `apply`/`apply!`.
 _jw_expand(op::AbstractOp, bi) = _noncommuting_basis(bi) ? _jw_expand_op(op, bi) : op
 
-# Element type the result can take, without building the expansion: the operator's own
-# entries plus whatever the non-commuting sites' string matrices contribute.
+# Element type of the result, without building the expansion.
 _result_eltype(op::AbstractOp, bi) = begin
     T = eltype(op)
     _noncommuting_basis(bi) || return T
@@ -62,18 +43,12 @@ _jw_expand_op(oc::OpChain, bi) = begin
 end
 _jw_expand_op(os::OpSum, bi) = OpSum(AbstractOp[_jw_expand_op(o, bi) for o in os.ops])
 
-# Inline an already-expanded factor into the flat list. Anything that is not a plain `Op`
-# (an `OpSum`, from a factor carrying both parities) stays put as a barrier.
+# Inline an expanded factor into the flat list; anything not a plain `Op` stays as a barrier.
 _splice!(out, e::OpChain) = (foreach(x -> _splice!(out, x), e.ops); out)
 _splice!(out, e::AbstractOp) = (push!(out, e); out)
 
-# Expanding each factor on its own is exact but not minimal: in `c†(k) c(k+1)` both factors
-# drag a string across sites 1..k-1, and those cancel pairwise (Z*Z = I). Left in place they
-# make the term span k+1 sites instead of 2 -- harmless for `apply` (a few wasted passes) but
-# fatal for `compile_apply`, whose generated code is exponential in the term width. So merge
-# same-site factors within each barrier-free run and drop the identities that result.
-# Factors on distinct sites commute here (all strings are explicit), so reordering a run into
-# first-appearance order is sound; `OpSum`s are barriers and are never reordered past.
+# Merges same-site factors within each barrier-free run and drops the resulting identities.
+# Runs are reordered into first-appearance order; `OpSum`s are barriers.
 _collapse_chain(ops::AbstractVector) = begin
     out = AbstractOp[]
     run = Pair{Any,Matrix}[]
@@ -222,8 +197,8 @@ Out-of-place-into-`w` version of [`apply`](@ref) for state vectors: overwrites `
 applied to `v` and returns `w`. `v` is left untouched, and `w` must not alias it; the
 element type of `w` must be able to hold the result.
 
-Scratch buffers are allocated internally for chains and sums (a chain of `n` factors needs
-somewhere to put its intermediate results); only a single-factor `Op` runs allocation-free.
+Scratch buffers are allocated internally for chains and sums; only a single-factor `Op`
+runs allocation-free.
 
 # Examples
 ```julia
@@ -246,9 +221,7 @@ apply!(w::AbstractVector, op::AbstractOp, v::AbstractVector, bi::AbstractVector{
     _apply!(w, _jw_expand(op, bi), v, bi)
 end
 
-# Every index of `w` lies in exactly one fiber, so the fiber-wise `mul!` writes all of `w`
-# and no separate zeroing pass is needed. `w` and `v` are known not to alias, so the source
-# fiber can be read directly rather than copied into a buffer first.
+# Fiber-wise `mul!` over every index of `w`.
 _apply!(w::AbstractVector, op::Op, v::AbstractVector, bi) = begin
     stride, dim = _stride_and_dim(op.site, bi)
     size(op.mat, 1) == dim || throw(DimensionMismatch(
@@ -266,8 +239,7 @@ _apply!(w::AbstractVector, oc::OpChain, v::AbstractVector, bi) = begin
     length(ops) == 1 && return _apply!(w, only(ops), v, bi)
 
     # OpChain([A, B]) is the matrix product A*B: the rightmost factor acts first. Results
-    # ping-pong between two scratch buffers so source and destination never alias, with the
-    # leftmost factor writing straight into `w`.
+    # ping-pong between two scratch buffers, the leftmost factor writing into `w`.
     bufs = (similar(w), similar(w))
     src, next = v, 1
     for k in lastindex(ops):-1:firstindex(ops)+1

@@ -45,7 +45,7 @@ function _decompose(A, sites, dims, significant)
         factors = AbstractOp[
             Op(bases[k][label], sites[k]) for (k, label) in enumerate(path) if !isone(bases[k][label])
         ]
-        # a multiple of the identity still needs one operator to carry it
+        # keep one operator to carry a multiple of the identity
         isempty(factors) && push!(factors, Op(bases[1][1], sites[1]))
         push!(terms, coefficient * OpChain(factors))
     end

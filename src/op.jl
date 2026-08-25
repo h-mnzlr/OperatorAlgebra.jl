@@ -58,15 +58,12 @@ Base.complex(A::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,complex(Tmat)}(complex(A
 Base.adjoint(A::Op) = Op(adjoint(A.mat), A.site)
 Base.transpose(A::Op) = Op(transpose(A.mat), A.site)
 
-# naming the parameters pins the return type: `mat` is an `AbstractMatrix{Tmat}` field, so
-# inference cannot recover them from `one(op.mat)`/`zero(op.mat)` alone
 Base.one(op::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,Tmat}(one(op.mat), op.site)
 Base.zero(op::Op{Tid,Tmat}) where {Tid,Tmat} = Op{Tid,Tmat}(zero(op.mat), op.site)
 Base.iszero(A::Op) = iszero(A.mat)
 Base.isone(A::Op) = isone(A.mat)
 
-# Structural equality, as `isequal` is expected to provide. `==` is deliberately left at
-# its default, since two operators can be equal without being written the same way.
+# Structural equality, as `isequal` is expected to provide.
 Base.isequal(A::Op, B::Op) = isequal(A.site, B.site) && isequal(A.mat, B.mat)
 
 Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} =

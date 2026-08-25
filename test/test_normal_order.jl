@@ -92,6 +92,50 @@ embeds_equally(op, bi) = atsite(Matrix, normal_order(op, bi), bi) ≈ atsite(Mat
         end
     end
 
+    @testset "A parity-mixing factor branches the chain into a sum" begin
+        bi = [fermion(1) => 2, fermion(2) => 2]
+        mixed = fermion(Op(PAULI_X + PAULI_Z, 2))
+
+        @testset "Each parity component becomes its own ordered term" begin
+            result = normal_order(mixed * c1, bi)
+
+            @test result isa OpSum
+            @test length(result.ops) == 2
+            @test all(t -> [rawsite(o.site) for o in t.ops] == [1, 2], result.ops)
+        end
+
+        @testset "The operator is unchanged" begin
+            @test embeds_equally(mixed * c1, bi)
+        end
+
+        @testset "A vanishing partner collapses every branch to zero" begin
+            expr = mixed * fermion(Op(zeros(Int, 2, 2), 1))
+
+            @test iszero(normal_order(expr, bi))
+            @test embeds_equally(expr, bi)
+        end
+
+        # The branch matrices are conjugated by the exchange string, which coincides with a
+        # uniform scaling only for the involutive fermionic phase -- so the split is checked
+        # away from lambda = -1 as well.
+        @testset "A site whose phase is not its own inverse" begin
+            struct NormalOrderPhaseSite{Tid} <: OperatorAlgebra.AbstractSite{Tid}
+                site::Tid
+            end
+            OperatorAlgebra.exchange_style(::NormalOrderPhaseSite) = OperatorAlgebra.Fermionic()
+            OperatorAlgebra.exchange_phase(::NormalOrderPhaseSite) = cis(pi / 5)
+            ps(k) = NormalOrderPhaseSite(k)
+
+            bi_p = [ps(1) => 2, ps(2) => 2]
+            expr = Op(PAULI_X + PAULI_Z, ps(2)) * Op(LOWER, ps(1))
+            result = normal_order(expr, bi_p)
+
+            @test result isa OpSum
+            @test length(result.ops) == 2
+            @test embeds_equally(expr, bi_p)
+        end
+    end
+
     @testset "Only reordering is performed" begin
         @testset "Same-site factors are left as separate factors" begin
             result = normal_order(c1d * c1)

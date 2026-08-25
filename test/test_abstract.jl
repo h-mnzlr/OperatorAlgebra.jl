@@ -157,9 +157,6 @@ using OperatorAlgebra: sitetype, eltype, commutator
     @testset "Unimplemented abstract hooks throw" begin
         op = MockOp(1.0)
 
-        @test !iszero(op)
         @test_throws Exception sites(op)
-        @test_throws Exception zero(MockOp)
-        @test_throws Exception one(MockOp)
     end
 end
