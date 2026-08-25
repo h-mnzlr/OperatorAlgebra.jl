@@ -364,6 +364,51 @@ end
     end
 end
 
+@testset "OpChain Transpose Tests" begin
+    @testset "Transpose reverses order and transposes each factor: (AB)ᵀ = BᵀAᵀ" begin
+        A = [1+im 2; 3 4-im]
+        B = [5+2im 6; 7 8-3im]
+
+        opchain_t = transpose(OpChain(Op(A, 1), Op(B, 2)))
+
+        @test opchain_t isa OpChain{Int64,Complex{Int64}}
+        @test opchain_t.ops[1].mat == transpose(B)
+        @test opchain_t.ops[1].site == 2
+        @test opchain_t.ops[2].mat == transpose(A)
+        @test opchain_t.ops[2].site == 1
+    end
+
+    @testset "Double transpose returns to original" begin
+        opchain = OpChain(Op([1 2; 3 4], 1), Op([5 6; 7 8], 2), Op([9 10; 11 12], 3))
+
+        opchain_t_t = transpose(transpose(opchain))
+
+        @test [op.site for op in opchain_t_t.ops] == [1, 2, 3]
+        @test opchain_t_t.ops[1].mat == [1 2; 3 4]
+        @test opchain_t_t.ops[2].mat == [5 6; 7 8]
+        @test opchain_t_t.ops[3].mat == [9 10; 11 12]
+    end
+
+    @testset "Transpose with many operators" begin
+        ops = [Op(rand(ComplexF64, 2, 2), i) for i in 1:10]
+
+        opchain_t = transpose(OpChain(ops...))
+
+        @test length(opchain_t.ops) == 10
+        for i in 1:10
+            @test opchain_t.ops[i].site == 11 - i  # reversed order
+            @test opchain_t.ops[i].mat == transpose(ops[11-i].mat)
+        end
+    end
+
+    @testset "Transpose with Symbol site IDs" begin
+        opchain_t = transpose(OpChain(Op([1 2; 3 4], :a), Op([5 6; 7 8], :b)))
+
+        @test opchain_t.ops[1].site == :b
+        @test opchain_t.ops[2].site == :a
+    end
+end
+
 @testset "OpChain empty-vector constructor" begin
     # The empty case cannot infer Tid/Tmat by promotion, so it falls back to Bool,Bool.
     oc = OpChain(AbstractOp[])

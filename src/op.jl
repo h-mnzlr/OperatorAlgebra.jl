@@ -48,6 +48,7 @@ end
 Base.:*(A::Op, s::Number) = Op(A.mat * s, A.site)
 Base.:*(s::Number, A::Op) = A * s
 Base.adjoint(A::Op) = Op(adjoint(A.mat), A.site)
+Base.transpose(A::Op) = Op(transpose(A.mat), A.site)
 
 # naming the parameters pins the return type: `mat` is an `AbstractMatrix{Tmat}` field, so
 # inference cannot recover them from `one(op.mat)`/`zero(op.mat)` alone

@@ -84,6 +84,7 @@ Base.:*(oc::OpChain, s::Number) = s * oc
 _repeated(oc::OpChain, n::Integer) = OpChain{sitetype(oc),eltype(oc)}(repeat(oc.ops, n))
 
 Base.adjoint(oc::OpChain) = OpChain(AbstractOp[adjoint(op) for op in reverse(oc.ops)])
+Base.transpose(oc::OpChain) = OpChain(AbstractOp[transpose(op) for op in reverse(oc.ops)])
 
 Base.one(oc::OpChain{Tid,Tmat}) where {Tid,Tmat} = OpChain{Tid,Tmat}([one(first(oc.ops))])
 Base.zero(oc::OpChain{Tid,Tmat}) where {Tid,Tmat} = OpChain{Tid,Tmat}([zero(first(oc.ops))])

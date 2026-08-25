@@ -80,6 +80,7 @@ Base.:*(s::Number, A::OpSum) = OpSum(AbstractOp[s * op for op in A.ops])
 Base.:*(A::OpSum, s::Number) = OpSum(AbstractOp[op * s for op in A.ops])
 
 Base.adjoint(os::OpSum) = OpSum(AbstractOp[adjoint(op) for op in os.ops])
+Base.transpose(os::OpSum) = OpSum(AbstractOp[transpose(op) for op in os.ops])
 
 Base.one(os::OpSum{Tid,Tmat}) where {Tid,Tmat} = OpSum{Tid,Tmat}([one(first(os.ops))])
 Base.zero(os::OpSum{Tid,Tmat}) where {Tid,Tmat} = OpSum{Tid,Tmat}([zero(first(os.ops))])

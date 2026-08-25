@@ -272,6 +272,45 @@ end
     end
 end
 
+@testset "OpSum Transpose Tests" begin
+    @testset "Transpose applies to every term, preserves sites and types" begin
+        op1 = Op([1+im 2; 3 4-im], :a)
+        op2 = Op([5+2im 6; 7 8-3im], :b)
+
+        opsum_t = transpose(OpSum(op1, op2))
+
+        @test opsum_t isa OpSum{Symbol,Complex{Int64}}
+        @test opsum_t.ops[1].mat == [1+im 3; 2 4-im]
+        @test opsum_t.ops[2].mat == [5+2im 7; 6 8-3im]
+        @test opsum_t.ops[1].site == :a
+        @test opsum_t.ops[2].site == :b
+    end
+
+    @testset "Transpose preserves term order" begin
+        opsum_t = transpose(OpSum(Op([1 2; 3 4], 1), Op([5 6; 7 8], 2)))
+
+        @test [op.site for op in opsum_t.ops] == [1, 2]
+    end
+
+    @testset "Double transpose returns to original" begin
+        opsum = OpSum(Op([1 2; 3 4], 1), Op([5 6; 7 8], 2))
+
+        opsum_t_t = transpose(transpose(opsum))
+
+        @test opsum_t_t.ops[1].mat == [1 2; 3 4]
+        @test opsum_t_t.ops[2].mat == [5 6; 7 8]
+    end
+
+    @testset "Transpose with many operators" begin
+        ops = [Op(rand(ComplexF64, 2, 2), i) for i in 1:5]
+
+        opsum_t = transpose(OpSum(ops...))
+
+        @test length(opsum_t.ops) == 5
+        @test all(i -> opsum_t.ops[i].mat == transpose(ops[i].mat), 1:5)
+    end
+end
+
 @testset "OpSum empty-vector constructor" begin
     # As for OpChain, the empty case has nothing to promote and falls back to Bool,Bool.
     os = OpSum(AbstractOp[])

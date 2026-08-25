@@ -153,6 +153,41 @@ end
     end
 end
 
+@testset "Op Transpose Tests" begin
+    @testset "Transpose flips indices without conjugating, preserves site and types" begin
+        real_t = transpose(Op([1 2; 3 4], 1))
+        @test real_t isa Op{Int64,Int64}
+        @test real_t.mat == [1 3; 2 4]
+        @test real_t.site == 1
+
+        complex_t = transpose(Op([1+2im 3-im; 4+5im 6], :site_a))
+        @test complex_t.mat == [1+2im 4+5im; 3-im 6]
+        @test complex_t.site == :site_a
+
+        float_t = transpose(Op([1.0 2.0; 3.0 4.0], 1))
+        @test float_t.mat == [1.0 3.0; 2.0 4.0]
+        @test eltype(float_t.mat) == Float64
+    end
+
+    @testset "Double transpose returns to original" begin
+        mat = [1+2im 3; 4 5-im]
+        op_t_t = transpose(transpose(Op(mat, 1)))
+
+        @test op_t_t.mat == mat
+        @test op_t_t.site == 1
+    end
+
+    @testset "Symmetric matrix is a fixed point" begin
+        mat = [1 2+3im; 2+3im 4]
+        @test transpose(Op(mat, 1)).mat == mat
+    end
+
+    @testset "Special matrix types" begin
+        @test transpose(Op(Diagonal([1+im, 2-im, 3]), 5)).mat == Diagonal([1+im, 2-im, 3])
+        @test transpose(Op(sparse([1 2; 0 3]), 1)).mat == sparse([1 0; 2 3])
+    end
+end
+
 @testset "Commutator Tests" begin
     @testset "Op-Op commutator on same site uses matrix commutator" begin
         opx = Op([0 1; 1 0], 1)
