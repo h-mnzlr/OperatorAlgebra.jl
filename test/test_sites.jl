@@ -5,7 +5,7 @@ using LinearAlgebra
 @info "Testing sites() function..."
 
 # not exported: the site interface is implementor-facing, atsite is opt-in
-using OperatorAlgebra: atsite, rawsite, withrawsite,
+using OperatorAlgebra: atsite, rawsite,
                        AbstractSite, FermionSite, sitetype,
                        ExchangeStyle, Commuting, Fermionic,
                        exchange_style, site_parity, exchange_phase, exchange_string
@@ -20,6 +20,7 @@ struct PhaseSite{Tid} <: AbstractSite{Tid}
 end
 OperatorAlgebra.exchange_style(::PhaseSite) = Fermionic()
 OperatorAlgebra.exchange_phase(s::PhaseSite) = s.phase
+OperatorAlgebra.rawsite(f, s::PhaseSite) = PhaseSite(f(rawsite(s)), s.phase)
 phased(site, phase) = PhaseSite(site, ComplexF64(phase))
 
 @testset "AbstractSite / FermionSite / custom sites" begin
@@ -543,18 +544,18 @@ end
     @testset "Tags are preserved while identifiers change" begin
         @testset "Fermionic chain stays fermionic" begin
             fchain = fermion(Op(RAISE, 1) * Op(LOWER, 2))
-            result = mapsites(s -> s + 1, fchain)
+            result = mapsites(s -> rawsite(x -> x + 1, s), fchain)
             @test sites(result) == [fermion(2), fermion(3)]
         end
 
         @testset "Jordan-Wigner string survives relabeling" begin
-            result = mapsites(s -> s + 1, fermion(Op(RAISE, 1)))
+            result = mapsites(s -> rawsite(x -> x + 1, s), fermion(Op(RAISE, 1)))
             @test result.site isa FermionSite
             @test exchange_string(result.site, 2) == PAULI_Z
         end
 
         @testset "Custom Fermionic site keeps its exchange_phase" begin
-            result = mapsites(s -> s + 1, Op([1 0; 0 2], phased(5, -1im)))
+            result = mapsites(s -> rawsite(x -> x + 1, s), Op([1 0; 0 2], phased(5, -1im)))
             @test rawsite(result.site) == 6
             @test result.site isa PhaseSite
             @test exchange_phase(result.site) == -1im
@@ -562,45 +563,69 @@ end
 
         @testset "Mixed bosonic + fermionic expression" begin
             chain = Op(PAULI_X, 3) * fermion(Op(RAISE, 2)) * fermion(Op(LOWER, 1))
-            result = mapsites(s -> s + 10, chain)
+            result = mapsites(s -> rawsite(x -> x + 10, s), chain)
             @test Set(sites(result)) == Set([13, fermion(12), fermion(11)])
         end
 
-        @testset "f never sees the tag wrapper" begin
+        @testset "f sees the tagged site itself" begin
             seen = []
             mapsites(s -> (push!(seen, s); s), fermion(Op(RAISE, 1)))
-            @test seen == [1]
+            @test seen == [fermion(1)]
+
+            # ...and a plain site arrives plain
+            bare = []
+            mapsites(s -> (push!(bare, s); s), Op(PAULI_X, 1))
+            @test bare == [1]
         end
     end
 
-    @testset "withrawsite round-trip law" begin
+    @testset "rawsite(f, s) round-trip law" begin
         @testset "Bare site" begin
-            @test withrawsite(1, rawsite(1)) == 1
+            @test rawsite(identity, 1) == 1
+            @test rawsite(x -> x + 1, 1) == 2
         end
 
         @testset "FermionSite" begin
-            @test withrawsite(fermion(1), rawsite(fermion(1))) == fermion(1)
+            @test rawsite(identity, fermion(1)) == fermion(1)
+            @test rawsite(x -> x + 1, fermion(1)) == fermion(2)
         end
 
         @testset "Custom Fermionic site (PhaseSite)" begin
             a = phased(1, -1im)
-            @test withrawsite(a, rawsite(a)) == a
+            @test rawsite(identity, a) == a
         end
 
         @testset "Relabeling keeps the custom site's phase" begin
             a = phased(1, -1im)
-            @test rawsite(withrawsite(a, 9)) == 9
-            @test withrawsite(a, 9).phase == -1im
+            @test rawsite(rawsite(_ -> 9, a)) == 9
+            @test rawsite(_ -> 9, a).phase == -1im
+        end
+
+        @testset "f sees the raw identifier, not the wrapper" begin
+            seen = []
+            rawsite(x -> (push!(seen, x); x), fermion(:a))
+            @test seen == [:a]
         end
     end
 
-    @testset "f must return a plain identifier" begin
-        @testset "Returning a FermionSite throws" begin
-            @test_throws ArgumentError mapsites(fermion, Op(PAULI_X, 1))
+    @testset "f decides what happens to the tag" begin
+        @testset "Returning a FermionSite tags a plain site" begin
+            @test mapsites(fermion, Op(PAULI_X, 1)).site == fermion(1)
         end
 
-        @testset "Returning a custom AbstractSite throws" begin
-            @test_throws ArgumentError mapsites(s -> phased(s, -1im), Op(PAULI_X, 1))
+        @testset "Returning a custom AbstractSite tags with it" begin
+            result = mapsites(s -> phased(s, -1im), Op(PAULI_X, 1))
+            @test result.site isa PhaseSite
+            @test exchange_phase(result.site) == -1im
+        end
+
+        @testset "rawsite strips a tag" begin
+            @test mapsites(rawsite, fermion(Op(RAISE, 1))).site === 1
+            @test !(mapsites(rawsite, fermion(Op(RAISE, 1))).site isa AbstractSite)
+        end
+
+        @testset "re-tagging replaces rather than nests" begin
+            @test mapsites(fermion, Op(PAULI_X, phased(2, -1im))).site == fermion(2)
         end
     end
 

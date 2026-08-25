@@ -22,7 +22,6 @@ FermionSite
 ```@docs
 AbstractSite
 rawsite
-withrawsite
 ```
 
 ## Exchange Statistics

@@ -80,7 +80,7 @@ export simplify, normal_order, flattenop, commutator, decompose
 export PAULI_X, PAULI_Y, PAULI_Z, SPIN_X, SPIN_Y, SPIN_Z, RAISE, LOWER, OCC_PART, OCC_HOLE
 export apply, apply!, compile_apply, compile_apply!
 
-export fermion, mapsites
+export fermion, mapsites, rawsite
 
 include("abstract.jl")
 include("op.jl")
