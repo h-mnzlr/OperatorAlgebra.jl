@@ -1,7 +1,7 @@
 using Test
 using LinearAlgebra
 using SparseArrays
-using OperatorAlgebra: atsite  # not exported
+using OperatorAlgebra: atsite, _opkron_applicable  # not exported
 
 @info "Testing Kronecker products..."
 
@@ -164,4 +164,56 @@ end
     ψ[1] = 1.0
 
     @test M * ψ ≈ σx1 * (σy2 * (σz3 * (σx4 * ψ)))
+end
+
+@testset "atsite - OpChain kron optimization" begin
+    naive(T, oc, bi) = prod(atsite(T, op, bi) for op in oc.ops)
+    bi = [1 => 2, 2 => 2, 3 => 2, 4 => 2]
+
+    @testset "Applicability" begin
+        @test _opkron_applicable(Op(PAULI_X, 1) * Op(PAULI_Z, 3), bi)
+        @test !_opkron_applicable(Op(PAULI_X, 1) * (Op(PAULI_Z, 2) + Op(PAULI_X, 3)), bi)
+        @test !_opkron_applicable(Op(sparse(PAULI_X), 1) * Op(PAULI_Z, 3), bi)
+        @test !_opkron_applicable(Op(PAULI_X, 1) * Op(PAULI_Z, 5), bi)
+        fbi = [fermion(1) => 2, fermion(2) => 2]
+        @test !_opkron_applicable(fermion(Op(RAISE, 1)) * fermion(Op(LOWER, 2)), fbi)
+    end
+
+    @testset "Matches the factor-wise product" begin
+        chains = [
+            Op(PAULI_X, 1) * Op(PAULI_Z, 2),
+            Op(PAULI_X, 2) * Op(PAULI_Z, 4),
+            Op(PAULI_Y, 4) * Op(PAULI_X, 1),
+            Op(PAULI_X, 3) * Op(PAULI_Z, 1) * Op(RAISE, 3) * Op(PAULI_Y, 4),
+            Op(PAULI_X, 1) * Op(PAULI_X, 2) * Op(PAULI_X, 3) * Op(PAULI_X, 4),
+        ]
+        for oc in chains, T in (identity, Matrix, sparse)
+            @test _opkron_applicable(oc, bi)
+            @test atsite(T, oc, bi) == naive(T, oc, bi)
+            @test typeof(atsite(T, oc, bi)) == typeof(naive(T, oc, bi))
+        end
+    end
+
+    @testset "Same-site factors keep their order" begin
+        @test atsite(Op(PAULI_X, 2) * Op(PAULI_Z, 2), bi) == kron(I(2), PAULI_X * PAULI_Z, I(2), I(2))
+        @test atsite(Op(PAULI_Z, 2) * Op(PAULI_X, 2), bi) == kron(I(2), PAULI_Z * PAULI_X, I(2), I(2))
+    end
+
+    @testset "Mixed dimensions and element types" begin
+        bi3 = [1 => 2, 2 => 3, 3 => 2, 4 => 3]
+        A, B = [0 1 0; 1 0 1; 0 1 0], [1 0 0; 0 2im 0; 0 0 3]
+        oc = Op(A, 2) * Op(PAULI_X, 3) * Op(B, 2) * Op(A, 4)
+        @test _opkron_applicable(oc, bi3)
+        @test atsite(oc, bi3) == kron(I(2), A * B, PAULI_X, A)
+        @test eltype(atsite(oc, bi3)) == Complex{Int}
+    end
+
+    @testset "Non-integer site identifiers" begin
+        bis = [:a => 2, :b => 2, :c => 2]
+        @test atsite(Op(PAULI_X, :c) * Op(PAULI_Z, :a), bis) == kron(PAULI_Z, I(2), PAULI_X)
+    end
+
+    @testset "Site not in basis throws" begin
+        @test_throws ArgumentError atsite(Op(PAULI_X, 1) * Op(PAULI_Z, 5), bi)
+    end
 end

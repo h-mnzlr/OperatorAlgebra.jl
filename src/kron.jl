@@ -43,7 +43,7 @@ op_full = atsite(op, basis_info(op))
 
 # Extended Methods
 - `atsite(os::OpSum, bi)`: Extends each term and sums
-- `atsite(oc::OpChain, bi)`: Extends each operator and takes product
+- `atsite(oc::OpChain, bi)`: Extends the product of the factors
 
 See also: [`Op`](@ref), [`basis_info`](@ref), `sparse`
 """
@@ -81,5 +81,22 @@ atsite(T, os::OpSum, bi::AbstractVector{<:Pair}) = begin
 end
 atsite(T, oc::OpChain, bi::AbstractVector{<:Pair}) = begin
     isempty(oc.ops) && return T(I(basisdim(bi)))
+    _opkron_applicable(oc, bi) && return _atsite_opkron_optimization(T, oc, bi)
     prod(atsite(T, op, bi) for op in oc.ops)
+end
+
+_opkron_applicable(oc::OpChain, bi::AbstractVector{<:Pair}) = begin
+    _noncommuting_basis(bi) && return false
+    basis = sites(bi)
+    all(o -> o isa Op && o.mat isa Matrix && o.site in basis, oc.ops)
+end
+
+_atsite_opkron_optimization(T, oc::OpChain, bi::AbstractVector{<:Pair}) = begin
+    pos = _positiondict(bi)
+    onsite = [Matrix{eltype(oc)}(I, d, d) for d in sitedims(bi)]
+    for o in oc.ops
+        k = pos[o.site]
+        onsite[k] = onsite[k] * o.mat
+    end
+    mapreduce(T, kron, onsite)
 end
