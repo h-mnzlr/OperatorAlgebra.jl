@@ -74,6 +74,35 @@ end
         opsum = OpSum(Op([1.0 0.0; 0.0 1.0], 1), Op([0.0 1.0; 1.0 0.0], 2))
         @test sparse(opsum, bi) isa SparseMatrixCSC{Float64}
     end
+
+    @testset "Matches summing the embedded terms" begin
+        bi5 = [i => 2 for i in 1:5]
+        sums = [
+            Op(PAULI_X, 1) + Op(PAULI_Z, 2) + Op(PAULI_X, 1) * Op(PAULI_X, 2),
+            Op(PAULI_Z, 1) + Op(PAULI_Z, 2) + 2.5im * Op(RAISE, 4),
+            Op(PAULI_X, 2) * (Op(PAULI_Z, 1) + Op(PAULI_X, 4)) + Op(PAULI_Y, 5),
+            OpSum(Op(PAULI_X, 1) + Op(PAULI_Z, 3), Op(PAULI_Y, 2)),
+        ]
+        for os in sums
+            @test sparse(os, bi5) == atsite(sparse, os, bi5)
+            @test typeof(sparse(os, bi5)) == typeof(atsite(sparse, os, bi5))
+        end
+
+        fbi = [fermion(i) => 2 for i in 1:4]
+        hop = fermion(Op(RAISE, 1)) * fermion(Op(LOWER, 3)) + fermion(Op(RAISE, 3)) * fermion(Op(LOWER, 1))
+        @test sparse(hop, fbi) == atsite(sparse, hop, fbi)
+    end
+
+    @testset "Cancelling terms leave no stored zeros" begin
+        M = sparse(Op(PAULI_X, 1) - Op(PAULI_X, 1) + Op(PAULI_Z, 2), bi)
+        @test M == kron(I(2), PAULI_Z)
+        @test nnz(M) == 4
+        @test nnz(sparse(OpSum(Op(PAULI_X, 1), -Op(PAULI_X, 1)), bi)) == 0
+    end
+
+    @testset "Empty sum" begin
+        @test sparse(OpSum{Int,Int}(Op{Int,Int}[]), bi) == spzeros(Int, 4, 4)
+    end
 end
 
 @testset "Sparse Conversion for OpChain" begin

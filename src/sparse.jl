@@ -32,3 +32,12 @@ H_matrix = sparse(H)  # equivalent to sparse(H, basis_info(H))
 See also: [`atsite`](@ref), [`basis_info`](@ref), `LinearMap`, [`OpSum`](@ref), [`OpChain`](@ref)
 """
 SparseArrays.sparse(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op)) = atsite(sparse, op, bi)
+SparseArrays.sparse(os::OpSum, bi::AbstractVector{<:Pair}=basis_info(os)) = begin
+    isempty(os.ops) && return atsite(sparse, os, bi)
+    entries = [findnz(sparse(op, bi)) for op in os.ops]
+    rows = reduce(vcat, getindex.(entries, 1))
+    cols = reduce(vcat, getindex.(entries, 2))
+    vals = reduce(vcat, getindex.(entries, 3))
+    n = basisdim(bi)
+    dropzeros!(sparse(rows, cols, vals, n, n))
+end
