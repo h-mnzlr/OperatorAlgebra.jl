@@ -144,7 +144,7 @@ end
 
     @testset "fermion tags survive relabeling" begin
         op = fermion(Op(RAISE, 1)) * fermion(Op(LOWER, 3))
-        moved = mapsites(s -> s + 5, op)
+        moved = mapsites(s -> rawsite(x -> x + 5, s), op)
         # Still fermionic and still obeys the CAR after the move.
         c2 = fermion(Op(LOWER, 6))
         combined = moved + c2   # forces a shared fermionic basis
