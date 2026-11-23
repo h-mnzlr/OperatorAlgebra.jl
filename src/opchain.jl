@@ -98,6 +98,7 @@ Base.isone(oc::OpChain) = all(isone(op) for op in oc.ops)
 
 Base.isequal(a::OpChain, b::OpChain) =
     length(a.ops) == length(b.ops) && all(isequal(x, y) for (x, y) in zip(a.ops, b.ops))
+Base.hash(oc::OpChain, h::UInt) = foldr(hash, oc.ops, init=hash(0x5f3a9c1e7b204d86, h)) # literal used as OpChain salt
 
 Base.convert(::Type{OpChain{Tid,Tmat}}, oc::OpChain) where {Tid,Tmat} = OpChain{Tid,Tmat}(oc.ops)
 

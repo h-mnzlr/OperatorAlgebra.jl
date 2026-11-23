@@ -65,6 +65,7 @@ Base.isone(A::Op) = isone(A.mat)
 
 # Structural equality, as `isequal` is expected to provide.
 Base.isequal(A::Op, B::Op) = isequal(A.site, B.site) && isequal(A.mat, B.mat)
+Base.hash(A::Op, h::UInt) = hash(A.site, hash(A.mat, h))
 
 Base.convert(::Type{Op{Tid,Tmat}}, A::Op) where {Tid,Tmat} =
     Op{Tid,Tmat}(convert(AbstractMatrix{Tmat}, A.mat), A.site)

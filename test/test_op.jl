@@ -290,3 +290,41 @@ end
         @test size(op_rect.mat) == (2, 3)
     end
 end
+
+@testset "Op Hash Tests" begin
+    m1 = [0 1; 2 0]
+    m2 = [1 0; 0 -1]
+    op = Op(m1, 1)
+
+    @testset "isequal operators hash equal" begin
+        for other in (
+            Op(copy(m1), 1),
+            Op(float(m1), 1),
+            Op(complex(float(m1)), 1),
+            Op(sparse(m1), 1),
+            Op(m1, 1.0),
+            Op(collect(m1'), 1)',
+        )
+            @test isequal(op, other)
+            @test hash(op) == hash(other)
+            @test hash(op, UInt(7)) == hash(other, UInt(7))
+        end
+    end
+
+    @testset "site, matrix and seed enter the hash" begin
+        @test hash(op) != hash(Op(m1, 2))
+        @test hash(op) != hash(Op(m2, 1))
+        @test hash(op) != hash(Op(m1, fermion(1)))
+        @test hash(op, UInt(1)) != hash(op, UInt(2))
+    end
+
+    @testset "Set, Dict and unique use structural equality" begin
+        @test length(Set([op, Op(copy(m1), 1), Op(float(m1), 1)])) == 1
+        @test length(unique([op, Op(copy(m1), 1), Op(m2, 1)])) == 2
+
+        d = Dict(op => :m1)
+        @test d[Op(copy(m1), 1)] == :m1
+        @test d[Op(sparse(m1), 1)] == :m1
+        @test !haskey(d, Op(m1, 2))
+    end
+end

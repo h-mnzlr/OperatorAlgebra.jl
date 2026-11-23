@@ -95,6 +95,7 @@ Base.isone(os::OpSum) = length(os.ops) == 1 && isone(only(os.ops))
 
 Base.isequal(a::OpSum, b::OpSum) =
     length(a.ops) == length(b.ops) && all(isequal(x, y) for (x, y) in zip(a.ops, b.ops))
+Base.hash(os::OpSum, h::UInt) = foldr(hash, os.ops, init=hash(0xc2b47e09a1d6358f, h))  # literal used as OpSum salt
 
 Base.convert(::Type{OpSum{Tid,Tmat}}, os::OpSum) where {Tid,Tmat} = OpSum{Tid,Tmat}(os.ops)
 

@@ -448,3 +448,41 @@ end
     # a chain of no factors is the identity, and embeds as such
     @test Array(oc, [1 => 2, 2 => 2]) == Matrix(I, 4, 4)
 end
+
+@testset "OpChain Hash Tests" begin
+    m1 = [0 1; 2 0]
+    m2 = [1 0; 0 -1]
+    a, b, c = Op(m1, 1), Op(m2, 2), Op(m1, 3)
+
+    @testset "isequal chains hash equal" begin
+        for (p, q) in (
+            (a * b, Op(copy(m1), 1) * Op(copy(m2), 2)),
+            (a * b, Op(float(m1), 1) * Op(float(m2), 2)),
+            (a * (b + c), Op(copy(m1), 1) * (Op(copy(m2), 2) + Op(copy(m1), 3))),
+            (OpChain(AbstractOp[]), OpChain(AbstractOp[])),
+        )
+            @test isequal(p, q)
+            @test hash(p) == hash(q)
+            @test hash(p, UInt(7)) == hash(q, UInt(7))
+        end
+    end
+
+    @testset "factor order, length, nesting, kind and seed enter the hash" begin
+        @test hash(a * b) != hash(b * a)
+        @test hash(a * b) != hash(a * b * c)
+        @test hash(OpChain(a)) != hash(a)
+        @test hash(OpChain(a * b)) != hash(a * b)
+        @test hash(a * b) != hash(a + b)
+        @test hash(OpChain(AbstractOp[])) != hash(OpSum(AbstractOp[]))
+        @test hash(a * b, UInt(1)) != hash(a * b, UInt(2))
+    end
+
+    @testset "Set, Dict and unique use structural equality" begin
+        @test length(Set([a * b, Op(copy(m1), 1) * Op(copy(m2), 2)])) == 1
+        @test length(unique([a * b, Op(copy(m1), 1) * Op(copy(m2), 2), b * a])) == 2
+
+        d = Dict(a * b => :ab)
+        @test d[Op(float(m1), 1) * Op(float(m2), 2)] == :ab
+        @test !haskey(d, b * a)
+    end
+end
