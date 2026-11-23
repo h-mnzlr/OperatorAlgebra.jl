@@ -47,7 +47,17 @@ op_full = atsite(op, basis_info(op))
 
 See also: [`Op`](@ref), [`basis_info`](@ref), `sparse`
 """
-function atsite(T, op::Op, bi::AbstractVector{<:Pair})
+atsite(T, op::AbstractOp, bi::AbstractVector{<:Pair}) = atsite(_accumulation_style(T), T, op, bi)
+atsite(op::AbstractOp, bi::AbstractVector{<:Pair}) = atsite(identity, op, bi)
+
+abstract type _AccumulationStyle end
+struct _Termwise <: _AccumulationStyle end
+struct _InPlace <: _AccumulationStyle end
+
+_accumulation_style(T) = _Termwise()
+_accumulation_style(::Type{<:Array}) = _InPlace()
+
+function atsite(::_AccumulationStyle, T, op::Op, bi::AbstractVector{<:Pair})
     basis = sites(bi)
     dims = sitedims(bi)
 
@@ -74,15 +84,23 @@ function atsite(T, op::Op, bi::AbstractVector{<:Pair})
     even_term() + odd_term()
 end
 
-atsite(op::AbstractOp, bi::AbstractVector{<:Pair}) = atsite(identity, op, bi)
-atsite(T, os::OpSum, bi::AbstractVector{<:Pair}) = begin
+atsite(style::_Termwise, T, os::OpSum, bi::AbstractVector{<:Pair}) = begin
     isempty(os.ops) && return T(zeros(eltype(os), basisdim(bi), basisdim(bi)))
-    sum(atsite(T, op, bi) for op in os.ops)
+    sum(atsite(style, T, op, bi) for op in os.ops)
 end
-atsite(T, oc::OpChain, bi::AbstractVector{<:Pair}) = begin
+atsite(style::_InPlace, T, os::OpSum, bi::AbstractVector{<:Pair}) = begin
+    n = basisdim(bi)
+    out = fill!(similar(T(zeros(_result_eltype(os, bi), 1, 1)), n, n), 0)
+    for op in os.ops
+        out .+= atsite(style, T, op, bi)
+    end
+    out
+end
+
+atsite(style::_AccumulationStyle, T, oc::OpChain, bi::AbstractVector{<:Pair}) = begin
     isempty(oc.ops) && return T(I(basisdim(bi)))
     _opkron_applicable(oc, bi) && return _atsite_opkron_optimization(T, oc, bi)
-    prod(atsite(T, op, bi) for op in oc.ops)
+    prod(atsite(style, T, op, bi) for op in oc.ops)
 end
 
 _opkron_applicable(oc::OpChain, bi::AbstractVector{<:Pair}) = begin
