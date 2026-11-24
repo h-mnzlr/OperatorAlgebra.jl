@@ -299,7 +299,7 @@ end
 
         c! = compile_apply!(H, bi; threads=1)
         @test OperatorAlgebra.kernel_code(c!) isa Expr
-        @test eval(OperatorAlgebra.kernel_code(c!))(similar(v), v) ≈ expected
+        @test Base.invokelatest(eval(OperatorAlgebra.kernel_code(c!)), similar(v), v) ≈ expected
 
         compile_and_apply(op, v; threads) = compile_apply(op, bi; threads)(v)
         compile_and_apply!(w, op, v; threads) = compile_apply!(op, bi; threads)(w, v)
@@ -381,8 +381,8 @@ end
         for nt in (1, 2)
             c = compile_apply(H, bi; threads=nt)
             c! = compile_apply!(H, bi; threads=nt)
-            @test eval(OperatorAlgebra.kernel_code(c))(v) ≈ expected
-            @test eval(OperatorAlgebra.kernel_code(c!))(similar(v), v) ≈ expected
+            @test Base.invokelatest(eval(OperatorAlgebra.kernel_code(c)), v) ≈ expected
+            @test Base.invokelatest(eval(OperatorAlgebra.kernel_code(c!)), similar(v), v) ≈ expected
             @test (@inferred c(v)) isa Vector{ComplexF64}
             @test (@inferred c!(similar(v), v)) isa Vector{ComplexF64}
         end

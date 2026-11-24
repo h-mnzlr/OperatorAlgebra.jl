@@ -11,7 +11,7 @@ _walk_column(op::Op, d, st, k) =
 
 _walk(op::Op, st, k) = begin
     stride, dim = _stride_and_dim(op.site, st.bi)
-    pos = findfirst(p -> isequal(first(p), op.site), st.bi)
+    pos = st.position(op.site)
     size(op.mat) == (dim, dim) || throw(DimensionMismatch(
         "Operator matrix at site $(op.site) is $(size(op.mat, 1))×$(size(op.mat, 2)), but the basis assigns dimension $dim."))
 
@@ -73,10 +73,10 @@ _leaf(st) = begin
 end
 
 # leaves grouped by the sites they fix, as `[(pos, stride, dim), ...] => leaves`
-_leaf_groups(op::AbstractOp, bi, max_combos) = begin
+_leaf_groups(op::AbstractOp, bi, max_combos; position=site -> findfirst(p -> isequal(first(p), site), bi)) = begin
     groups = Pair{Vector{NTuple{3,Int}},Vector{Any}}[]
     index = Dict{Vector{NTuple{3,Int}},Int}()
-    st = (bi=bi, max_combos=max_combos, coef=true, diags=(), combos=1,
+    st = (bi=bi, max_combos=max_combos, position=position, coef=true, diags=(), combos=1,
         fixed=Base.ImmutableDict{Any,Any}(), digits=Base.ImmutableDict{Any,Int}())
     _walk(op, st, st -> begin
         leaf = _leaf(st)
@@ -225,9 +225,16 @@ _shifted(index, shift) =
     shift == 0 ? index : shift isa Expr && shift.head == :call && shift.args[1] == :- && length(shift.args) == 2 ?
                  :($index - $(shift.args[2])) : :($index + $shift)
 
-# w[i] = sum_j op[i, j] * v[j]: every operator contributes a coefficient and a partner index,
-# both read from tables indexed by the digits of `i` on its sites
-_table_loop(op::AbstractOp, bi, max_combos, Tm) = begin
+# coef * v[i + shift]
+_vector_term(coef, shift) = begin
+    value = :(v[$(_shifted(:i, shift))])
+    coef isa Expr ? :($coef * $value) : _product(coef, [value])
+end
+
+# acc += op[i, j] * v[j] for every operator: coefficient and partner shift are read from tables
+# indexed by the digits of the 0-based state `index0` on the operator's sites; `term(coef, shift)`
+# is the code of one contribution
+_table_statements(op::AbstractOp, bi, max_combos; index0=:i0, term=_vector_term, kwargs...) = begin
     sites = Dict{Int,Tuple{Int,Int}}()
     tables = Any[]
     names = Pair{Any,Symbol}[]
@@ -240,7 +247,7 @@ _table_loop(op::AbstractOp, bi, max_combos, Tm) = begin
         last(names[end])
     end
     contributions = Any[]
-    for (key, leaves) in _leaf_groups(op, bi, max_combos)
+    for (key, leaves) in _leaf_groups(op, bi, max_combos; kwargs...)
         for (pos, stride, dim) in key
             sites[pos] = (stride, dim)
         end
@@ -270,40 +277,38 @@ _table_loop(op::AbstractOp, bi, max_combos, Tm) = begin
                 ntables += 1
                 coefs = [k <= length(entries) ? convert(T, last(entries[k])) : zero(T) for entries in rows]
                 shifts = [k <= length(entries) ? _shift(key, first(entries[k]), todigits(r - 1)) : 0 for (r, entries) in enumerate(rows)]
-                index = if _allequal(shifts)
-                    _shifted(:i, first(shifts))
-                else
+                shift = first(shifts)
+                if !_allequal(shifts)
                     shiftname = Symbol(:shift, label, suffix)
                     push!(tables, :($shiftname = $(Expr(:tuple, shifts...))))
-                    :(i + $shiftname[$row+1])
+                    shift = :($shiftname[$row+1])
                 end
-                if _allequal(coefs)
-                    push!(summands, _product(first(coefs), [:(v[$index])]))
-                else
+                coef = first(coefs)
+                if !_allequal(coefs)
                     coefname = Symbol(:coef, label, suffix)
                     push!(tables, :($coefname = $(Tuple(coefs))))
-                    push!(summands, :($coefname[$row+1] * v[$index]))
+                    coef = :($coefname[$row+1])
                 end
+                push!(summands, term(coef, shift))
             end
             isempty(summands) || push!(contributions, :(acc += $(_product(true, Any[map(name, lookups)..., _sum(summands)]))))
         end
     end
 
     positions = sort!(collect(keys(sites)))
-    digits = [:($(_digit(pos)) = $(sites[pos][1] == 1 ? :(mod(i0, $(sites[pos][2]))) :
-                                   :(mod(div(i0, $(_stride(pos))), $(sites[pos][2])))))
+    digits = [:($(_digit(pos)) = $(sites[pos][1] == 1 ? :(mod($index0, $(sites[pos][2]))) :
+                                   :(mod(div($index0, $(_stride(pos))), $(sites[pos][2])))))
               for pos in positions]
     factors = [:($sym = $(lookup.vals)[$(_digit(lookup.pos))+1]) for (lookup, sym) in sort!(names; by=p -> first(p).pos)]
     bindings = Any[(:($(_stride(pos)) = $(sites[pos][1])) for pos in positions)..., tables...]
-    statements = Any[:(acc = zero(promote_type(eltype(w), eltype(v), $Tm))), :(i0 = (i - 1) % UInt),
-        digits..., factors..., contributions..., :(w[i] = acc)]
-    bindings, statements
+    bindings, Any[digits..., factors..., contributions...]
 end
 
 _allequal(xs) = all(==(first(xs)), xs)
 
 _threaded_statements(op::AbstractOp, bi, max_combos, Tm, threads) = begin
-    bindings, statements = _table_loop(op, bi, max_combos, Tm)
+    bindings, contributions = _table_statements(op, bi, max_combos)
+    statements = Any[:(acc = zero(promote_type(eltype(w), eltype(v), $Tm))), :(i0 = (i - 1) % UInt), contributions..., :(w[i] = acc)]
     loop = _inbounds(_for(:i, :(lo:hi), statements))
     task = isempty(bindings) ? loop : _let(bindings, [loop])
     Any[_sync(_for(:((lo, hi)), Tuple(_chunks(basisdim(bi), threads)), [_spawn(task)]))]
