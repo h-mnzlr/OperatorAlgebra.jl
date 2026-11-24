@@ -13,8 +13,5 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OperatorAlgebra = "49087e99-997d-48ed-8945-d57b707c274b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
-[compat]
-Latexify = "0.16.10"
-
 [sources]
 OperatorAlgebra = { path = "../../.." }
