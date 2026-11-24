@@ -89,9 +89,9 @@ jobs:
       - id: versions
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo 'matrix=["1.9","1"]' >> "$GITHUB_OUTPUT"
+            echo 'matrix=["1.10","1"]' >> "$GITHUB_OUTPUT"
           else
-            echo 'matrix=["1.9","1.10","1.11","1","nightly"]' >> "$GITHUB_OUTPUT"
+            echo 'matrix=["1.10","1.11","1","nightly"]' >> "$GITHUB_OUTPUT"
           fi
 
   # `name:` is deliberately unset here and on test-ext. `jobs.<id>.if` is evaluated *before*
