@@ -31,5 +31,8 @@ include("test_utils.jl")
     @info "Integration: rewriting..."
     include("test_rewriting.jl")
 
+    @info "Integration: compiled apply..."
+    include("test_compiled_apply.jl")
+
     @info "All integration tests completed!"
 end

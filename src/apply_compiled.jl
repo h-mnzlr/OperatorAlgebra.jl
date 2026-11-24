@@ -1,251 +1,325 @@
 # Compiled apply: generates a specialized kernel for one fixed operator.
 
-# One term as a codegen spec: same-site factors merged, sorted by stride, matrices flattened
-# to column-major NTuples.
-_term_spec(term::Vector{<:Op}, bi, max_combos) = begin
-    merged = Vector{Pair{Any,Matrix}}()
-    for f in term
-        i = findfirst(p -> isequal(first(p), f.site), merged)
-        if isnothing(i)
-            merged = push!(merged, f.site => Matrix(f.mat))
-        else
-            merged[i] = first(merged[i]) => last(merged[i]) * f.mat
-        end
-    end
-    # drop same-site factors that multiply out to the identity (cancelling Jordan-Wigner
-    # strings), keeping the term as narrow as possible
-    filter!(p -> !_isid(last(p)), merged)
-
-    factors = map(merged) do (site, mat)
-        stride, dim = _stride_and_dim(site, bi)
-        size(mat) == (dim, dim) || throw(DimensionMismatch(
-            "Operator matrix at site $site is $(size(mat, 1))×$(size(mat, 2)), but the basis assigns dimension $dim."))
-        (stride, dim, Tuple(mat))
-    end
-
-    # `max_combos` bounds the dense factors' combination count, which is what gets unrolled
-    dense, _ = _partition_diag(factors)
-    combos = prod(f[2] for f in dense; init=1)
-    combos <= max_combos || throw(ArgumentError(
-        "compile_apply: a term has $(length(dense)) non-diagonal (\"dense\") sites " *
-        "($combos local basis combinations), exceeding max_combos=$max_combos. Codegen is " *
-        "exponential in this number (diagonal sites, e.g. an uncancelled exchange_string " *
-        "tail, are cheap and don't count here), so compiling would be extremely slow/" *
-        "memory-hungry. Use `apply`/`apply!` instead (no term-width cost), or pass a larger " *
-        "`max_combos` to `compile_apply` if you specifically want to wait out the codegen."))
-
-    sort!(factors; by=first, rev=true)
-    Tuple(factors)
-end
-
-_apply_spec(op::AbstractOp, bi, max_combos) =
-    (basisdim(bi), Tuple(_term_spec(t, bi, max_combos) for t in _terms(op, Op)))
-
-# expression generation from a spec
-
-# Diagonal factors are held out of the combinatorial enumeration and handled by a runtime
-# lookup instead.
 _isdiag(mat::AbstractMatrix) =
     all(iszero(mat[i, j]) for i in axes(mat, 1), j in axes(mat, 2) if i != j)
 
-_partition_diag(factors) = begin
-    dense = eltype(factors)[]
-    diag = eltype(factors)[]
-    for f in factors
-        mat = reshape(collect(f[3]), f[2], f[2])
-        push!(_isdiag(mat) ? diag : dense, f)
+_walk_column(op::Op, d, st, k) =
+    for r in 0:size(op.mat, 1)-1
+        iszero(op.mat[r+1, d+1]) && continue
+        k(merge(st, (coef=st.coef * op.mat[r+1, d+1], digits=Base.ImmutableDict(st.digits, op.site => r))))
     end
-    dense, diag
+
+_walk(op::Op, st, k) = begin
+    stride, dim = _stride_and_dim(op.site, st.bi)
+    pos = findfirst(p -> isequal(first(p), op.site), st.bi)
+    size(op.mat) == (dim, dim) || throw(DimensionMismatch(
+        "Operator matrix at site $(op.site) is $(size(op.mat, 1))×$(size(op.mat, 2)), but the basis assigns dimension $dim."))
+
+    d = get(st.digits, op.site, nothing)
+    isnothing(d) || return _walk_column(op, d, st, k)
+    _isid(op.mat) && return k(st)
+    if _isdiag(op.mat)
+        diag = (site=op.site, pos=pos, stride=stride, vals=ntuple(j -> op.mat[j, j], dim))
+        return k(merge(st, (diags=(st.diags..., diag),)))
+    end
+
+    combos = st.combos * dim
+    combos <= st.max_combos || throw(ArgumentError(
+        "compile_apply: a term branches over more than max_combos=$(st.max_combos) local " *
+        "basis combinations of its non-diagonal sites. Generated code is exponential in " *
+        "the number of such sites (diagonal sites, e.g. an uncancelled exchange_string " *
+        "tail, are cheap and don't count here). Use `apply`/`apply!` instead (no " *
+        "term-width cost), or pass a larger `max_combos` to `compile_apply`."))
+    for d in 0:dim-1
+        fixed = Base.ImmutableDict(st.fixed, op.site => (pos=pos, stride=stride, dim=dim, from=d))
+        digits = Base.ImmutableDict(st.digits, op.site => d)
+        _walk_column(op, d, merge(st, (combos=combos, fixed=fixed, digits=digits)), k)
+    end
 end
 
-_diagvals(f) = begin
-    dim = f[2]
-    mat = reshape(collect(f[3]), dim, dim)
-    ntuple(k -> mat[k, k], dim)
-end
+# rightmost factor first
+_walk(oc::OpChain, st, k) = _walk_chain(oc.ops, length(oc.ops), st, k)
+_walk_chain(ops, n, st, k) =
+    n == 0 ? k(st) : _walk(ops[n], st, st2 -> _walk_chain(ops, n - 1, st2, k))
 
-_scaled(c, x) = isone(c) ? x : c == -1 ? :(-$x) : :($c * $x)
+_walk(os::OpSum, st, k) = foreach(o -> _walk(o, st, k), os.ops)
 
-# Straight-line body for the dense factors of one term at the 0-based index `base_expr`,
-# optionally scaled by the runtime `scale_expr`.
-_term_body(dense, base_expr=:base, scale_expr=nothing) = begin
-    strides = [f[1] for f in dense]
-    mats = [reshape(collect(f[3]), f[2], f[2]) for f in dense]
-    combos = vec(collect(Iterators.product((0:f[2]-1 for f in dense)...)))
-    offset(c) = sum(c[l] * strides[l] for l in eachindex(c); init=0)
-    xname(c) = Symbol(:x_, join(c, '_'))
-
-    used = Set{eltype(combos)}()
-    outs = Expr[]
-    for jc in combos
-        summands = Union{Expr,Symbol}[]
-        for kc in combos
-            coef = prod(mats[l][jc[l]+1, kc[l]+1] for l in eachindex(mats); init=1)
-            iszero(coef) && continue
-            push!(used, kc)
-            push!(summands, _scaled(coef, xname(kc)))
+# a diagonal factor with a single non-zero entry, next to off-diagonal factors, fixes its site
+_leaf(st) = begin
+    sites = Any[(pos=f.pos, stride=f.stride, dim=f.dim, from=f.from, to=st.digits[site]) for (site, f) in st.fixed]
+    coef = st.coef
+    lookups = []
+    for diag in st.diags
+        f = get(st.fixed, diag.site, nothing)
+        isnothing(f) ? push!(lookups, (pos=diag.pos, stride=diag.stride, vals=diag.vals)) : (coef *= diag.vals[f.from+1])
+    end
+    if !isempty(sites)
+        for lookup in lookups
+            count(!iszero, lookup.vals) == 1 || continue
+            any(s -> s.pos == lookup.pos, sites) && continue
+            d = findfirst(!iszero, lookup.vals) - 1
+            push!(sites, (pos=lookup.pos, stride=lookup.stride, dim=length(lookup.vals), from=d, to=d))
         end
-        isempty(summands) && continue
-        rhs = length(summands) == 1 ? summands[1] : Expr(:call, :+, summands...)
-        scale_expr !== nothing && (rhs = :($scale_expr * $rhs))
-        push!(outs, :(w[$base_expr+$(1 + offset(jc))] += $rhs))
+        remaining = []
+        for lookup in lookups
+            i = findfirst(s -> s.pos == lookup.pos, sites)
+            isnothing(i) ? push!(remaining, lookup) : (coef *= lookup.vals[sites[i].from+1])
+        end
+        lookups = remaining
     end
-    loads = [:($(xname(kc)) = v[$base_expr+$(1 + offset(kc))]) for kc in combos if kc in used]
-    quote
-        $(loads...)
-        $(outs...)
-    end
+    sort!(sites; by=s -> s.pos)
+    sort!(lookups; by=l -> l.pos)
+    (sites=sites, coef=coef, lookups=lookups)
 end
 
-# Wraps the dense-only body in one runtime loop per diagonal factor.
-_wrap_diag(dense, diag) = begin
-    isempty(diag) && return _term_body(dense)
-
-    dnames = [Symbol(:dg, l) for l in eachindex(diag)]
-    diagvals = map(_diagvals, diag)
-    base2_expr = foldl((e, l) -> :($e + $(diag[l][1]) * $(dnames[l])), eachindex(diag); init=:base)
-    scale_expr = foldl((e, l) -> :($e * $(diagvals[l])[$(dnames[l])+1]), eachindex(diag); init=1)
-
-    body = quote
-        base2 = $base2_expr
-        scale_val = $scale_expr
-        $(_term_body(dense, :base2, :scale_val))
-    end
-    for l in reverse(eachindex(diag))
-        dim = diag[l][2]
-        body = :(for $(dnames[l]) in 0:$(dim - 1)
-            $body
-        end)
-    end
-    body
-end
-
-# Loop nest over every `base` index whose digits at the involved sites are zero. An empty
-# factor list is the identity term.
-_term_loops(N, factors) = begin
-    m = length(factors)
-    m == 0 && return :(@inbounds for base in 0:$(N - 1)
-        w[base+1] += v[base+1]
+# leaves grouped by the sites they fix, as `[(pos, stride, dim), ...] => leaves`
+_leaf_groups(op::AbstractOp, bi, max_combos) = begin
+    groups = Pair{Vector{NTuple{3,Int}},Vector{Any}}[]
+    index = Dict{Vector{NTuple{3,Int}},Int}()
+    st = (bi=bi, max_combos=max_combos, coef=true, diags=(), combos=1,
+        fixed=Base.ImmutableDict{Any,Any}(), digits=Base.ImmutableDict{Any,Int}())
+    _walk(op, st, st -> begin
+        leaf = _leaf(st)
+        iszero(leaf.coef) && return
+        key = NTuple{3,Int}[(s.pos, s.stride, s.dim) for s in leaf.sites]
+        g = get!(index, key) do
+            push!(groups, key => Any[])
+            length(groups)
+        end
+        push!(last(groups[g]), leaf)
     end)
-
-    dense, diag = _partition_diag(factors)
-    strides = [f[1] for f in factors]
-    blocks = [f[1] * f[2] for f in factors]
-    b = [Symbol(:b, j) for j in 0:m]
-
-    loop = quote
-        base = $(b[m+1])
-        $(_wrap_diag(dense, diag))
-    end
-    loop = :(for $(b[m+1]) in $(b[m]):$(b[m]) + $(strides[m] - 1)
-        $loop
-    end)
-    for j in m-1:-1:1
-        loop = :(for $(b[j+1]) in $(b[j]):$(blocks[j+1]):$(b[j]) + $(strides[j] - 1)
-            $loop
-        end)
-    end
-    :(@inbounds for $(b[1]) in 0:$(blocks[1]):$(N - 1)
-        $loop
-    end)
+    groups
 end
 
-_kernel_expr(spec) = begin
-    N, terms = spec
-    quote
-        fill!(w, zero(eltype(w)))
-        $((_term_loops(N, collect(t)) for t in terms)...)
-        w
-    end
+# names in the generated code
+
+_stride(pos) = Symbol(:stride, pos)
+
+_loadname(key, digits) =
+    isempty(digits) ? :x : Symbol(:x, join(digits, any(dim > 10 for (_, _, dim) in key) ? "_" : ""))
+
+_lookupname(lookup) = Symbol(lookup.vals == (1, -1) ? :sign : :diag, lookup.pos)
+
+# expression building
+
+_times(n, x) = n == 1 ? x : :($n * $x)
+
+_product(coef, factors) = begin
+    e = foldl((a, b) -> :($a * $b), factors)
+    isone(coef) ? e : coef == -1 ? :(-$e) : :($coef * $e)
 end
 
-@generated _apply_kernel!(w::AbstractVector, v::AbstractVector, ::Val{S}) where {S} =
-    _kernel_expr(S)
+_sum(summands) = length(summands) == 1 ? only(summands) : Expr(:call, :+, summands...)
 
-# threaded kernel
-#
-# Gather form: each `w[i]` is written exactly once from gathered reads of `v`.
-# `_apply_index_kernel!` handles one output index; task spawning lives in the `CompiledApply`
-# call below.
+_for(var, range, statements) = Expr(:for, Expr(:(=), var, range), Expr(:block, statements...))
+_let(bindings, statements) = Expr(:let, Expr(:block, bindings...), Expr(:block, statements...))
 
-_spec_eltype(S) =
-    mapreduce(t -> mapreduce(f -> eltype(f[3]), promote_type, t; init=Union{}),
-        promote_type, S[2]; init=Union{}) |> T -> T === Union{} ? Bool : T
+_macro(name, arg) = Expr(:macrocall, name, nothing, arg)
+_inbounds(arg) = _macro(Symbol("@inbounds"), arg)
+_sync(arg) = _macro(Symbol("@sync"), arg)
+_spawn(arg) = _macro(Expr(:., :Threads, QuoteNode(Symbol("@spawn"))), arg)
 
-# Leaf of the branch tree over dense factors, with `diag`/`diag_dnames` contributing a
-# runtime scalar lookup that multiplies the whole leaf.
-_gather_leaf(dense, dense_mats, digits, diag, diag_dnames) = begin
-    combos = vec(collect(Iterators.product((0:f[2]-1 for f in dense)...)))
-    summands = Union{Expr,Symbol}[]
-    for kc in combos
-        coef = prod(dense_mats[l][digits[l]+1, kc[l]+1] for l in eachindex(dense_mats); init=1)
-        iszero(coef) && continue
-        off = sum((kc[l] - digits[l]) * dense[l][1] for l in eachindex(dense); init=0)
-        push!(summands, _scaled(coef, off == 0 ? :(v[i]) : :(v[i+$off])))
-    end
-    isempty(summands) && return nothing
-    rhs = length(summands) == 1 ? summands[1] : Expr(:call, :+, summands...)
-    if !isempty(diag)
-        diagvals = map(_diagvals, diag)
-        scale_expr = foldl((e, l) -> :($e * $(diagvals[l])[$(diag_dnames[l])+1]), eachindex(diag); init=1)
-        rhs = :($scale_expr * $rhs)
-    end
-    :(acc += $rhs)
+# base + digit * stride + ..., the 1-based index of the state with `digits` on the sites of `key`
+_index(key, digits) = begin
+    terms = [_times(d, _stride(pos)) for ((pos, _, _), d) in zip(key, digits) if d != 0]
+    isempty(terms) ? :base : Expr(:call, :+, :base, terms...)
 end
 
-_gather_branch(dense, dense_mats, dnames, digits, diag, diag_dnames) = begin
-    l = length(digits) + 1
-    l > length(dense) && return _gather_leaf(dense, dense_mats, digits, diag, diag_dnames)
-    D = dense[l][2]
-    expr = _gather_branch(dense, dense_mats, dnames, vcat(digits, D - 1), diag, diag_dnames)
-    for d in D-2:-1:0
-        expr = Expr(:if, :($(dnames[l]) == $d),
-            _gather_branch(dense, dense_mats, dnames, vcat(digits, d), diag, diag_dnames), expr)
+_lookup(lookup) = begin
+    dim = length(lookup.vals)
+    digit = lookup.stride == 1 ? :(mod(base0, $dim)) : :(mod(div(base0, $(_stride(lookup.pos))), $dim))
+    :($(lookup.vals)[$digit+1])
+end
+
+_stride_definitions(strides) = [:($(_stride(pos)) = $stride) for (pos, stride) in sort!(collect(strides))]
+
+# loops `base` over every 1-based index whose digits at the sites of `key` are zero
+_loop_nest(key, N, statements) = begin
+    levels = Any[(Symbol(:b, j), _times(dim, _stride(pos)), stride * dim,
+                  j == 1 ? :(length(v)) : _stride(key[j-1][1]), j == 1 ? N : key[j-1][2])
+              for (j, (pos, stride, dim)) in enumerate(key)]
+    push!(levels, isempty(key) ? (:base, 1, 1, :(length(v)), N) : (:base, 1, 1, _stride(key[end][1]), key[end][2]))
+    live = Any[level for level in levels if level[5] > level[3]]
+    isempty(live) && return _let([:(base = 1)], statements)
+    live[end] = (:base, live[end][2:end]...)
+    for i in length(live):-1:1
+        var, step, _, len, _ = live[i]
+        start = i == 1 ? 1 : first(live[i-1])
+        stop = i == 1 ? len : :($start + $len - 1)
+        statements = [_for(var, step == 1 ? :($start:$stop) : :($start:$step:$stop), statements)]
+    end
+    only(statements)
+end
+
+# w[to] += coef * v[from] for every leaf of the group; returns the statements and the
+# strides they name
+_group_statements(key, leaves) = begin
+    names = Pair{Any,Symbol}[]
+    name(lookup) = begin
+        i = findfirst(p -> first(p) == lookup, names)
+        isnothing(i) || return last(names[i])
+        taken = count(p -> first(p).pos == lookup.pos, names)
+        push!(names, lookup => (taken == 0 ? _lookupname(lookup) : Symbol(_lookupname(lookup), :_, taken + 1)))
+        last(names[end])
+    end
+    coefs = Dict{Tuple{Vector{Int},Vector{Int}},Any}()
+    summands = Dict{Vector{Int},Vector{Any}}()
+    froms = Set{Vector{Int}}()
+    for leaf in leaves
+        from, to = [s.from for s in leaf.sites], [s.to for s in leaf.sites]
+        if isempty(leaf.lookups)
+            coefs[(to, from)] = get(coefs, (to, from), false) + leaf.coef
+        else
+            push!(get!(summands, to, []), _product(leaf.coef, [map(name, leaf.lookups)..., _loadname(key, from)]))
+            push!(froms, from)
+        end
+    end
+    for (to, from) in sort!(collect(keys(coefs)))
+        iszero(coefs[(to, from)]) && continue
+        push!(get!(summands, to, []), _product(coefs[(to, from)], [_loadname(key, from)]))
+        push!(froms, from)
+    end
+
+    statements = Any[
+        (isempty(names) ? () : (:(base0 = (base - 1) % UInt),))...,
+        (:($sym = $(_lookup(lookup))) for (lookup, sym) in sort!(names; by=p -> first(p).pos))...,
+        (:($(_loadname(key, from)) = v[$(_index(key, from))]) for from in sort!(collect(froms)))...,
+        (:(w[$(_index(key, to))] += $(_sum(summands[to]))) for to in sort!(collect(keys(summands))))...,
+    ]
+    strides = Dict{Int,Int}(pos => stride for (pos, stride, _) in key)
+    for (lookup, _) in names
+        lookup.stride == 1 || (strides[lookup.pos] = lookup.stride)
+    end
+    statements, strides
+end
+
+_groups(op::AbstractOp, bi, max_combos) =
+    [(key, statements, strides) for (key, (statements, strides)) in
+     (key => _group_statements(key, leaves) for (key, leaves) in _leaf_groups(op, bi, max_combos))
+     if !isempty(statements)]
+
+_serial_statements(op::AbstractOp, bi, max_combos) = begin
+    N = basisdim(bi)
+    groups = _groups(op, bi, max_combos)
+    strides = merge(Dict{Int,Int}(), (strides for (_, _, strides) in groups)...)
+    nests = [_loop_nest(key, N, statements) for (key, statements, _) in groups]
+    zeroing = :(fill!(w, zero(eltype(w))))
+    isempty(nests) && return Any[zeroing]
+    Any[_stride_definitions(strides)..., zeroing, _inbounds(length(nests) == 1 ? only(nests) : Expr(:block, nests...))]
+end
+
+_digit(pos) = Symbol(:digit, pos)
+
+# (from - to) . strides, written in the stride names
+_shift(key, from, to) = begin
+    expr = 0
+    for ((pos, _, _), d) in zip(key, from .- to)
+        d == 0 && continue
+        term = _times(abs(d), _stride(pos))
+        expr = expr == 0 ? (d > 0 ? term : :(-$term)) : d > 0 ? :($expr + $term) : :($expr - $term)
     end
     expr
 end
 
-# One term's contribution to the accumulator at index `i`: extract the digits of every
-# involved site, then branch over the dense sites.
-_term_gather(factors, tidx) = begin
-    isempty(factors) && return :(acc += v[i])
-    dnames = [Symbol(:d, tidx, :_, l) for l in eachindex(factors)]
-    is_diag = [_isdiag(reshape(collect(f[3]), f[2], f[2])) for f in factors]
-    dense, diag = factors[.!is_diag], factors[is_diag]
-    dense_dnames, diag_dnames = dnames[.!is_diag], dnames[is_diag]
-    dense_mats = [reshape(collect(f[3]), f[2], f[2]) for f in dense]
-    digit_defs = [:($(dnames[l]) = mod(div(i - 1, $(factors[l][1])), $(factors[l][2])))
-                  for l in eachindex(factors)]
-    quote
-        $(digit_defs...)
-        $(_gather_branch(dense, dense_mats, dense_dnames, Int[], diag, diag_dnames))
-    end
-end
+_shifted(index, shift) =
+    shift == 0 ? index : shift isa Expr && shift.head == :call && shift.args[1] == :- && length(shift.args) == 2 ?
+                 :($index - $(shift.args[2])) : :($index + $shift)
 
-# Body of the per-index kernel: compute `w[i]` for the single output index `i`.
-_kernel_index_expr(spec, Tacc) = begin
-    _, terms = spec
-    blocks = [_term_gather(collect(t), tidx) for (tidx, t) in enumerate(terms)]
-    quote
-        $(Expr(:meta, :inline))
-        @inbounds begin
-            acc = zero($Tacc)
-            $(blocks...)
-            w[i] = acc
+# w[i] = sum_j op[i, j] * v[j]: every operator contributes a coefficient and a partner index,
+# both read from tables indexed by the digits of `i` on its sites
+_table_loop(op::AbstractOp, bi, max_combos, Tm) = begin
+    sites = Dict{Int,Tuple{Int,Int}}()
+    tables = Any[]
+    names = Pair{Any,Symbol}[]
+    name(lookup) = begin
+        i = findfirst(p -> first(p) == lookup, names)
+        isnothing(i) || return last(names[i])
+        taken = count(p -> first(p).pos == lookup.pos, names)
+        sites[lookup.pos] = (lookup.stride, length(lookup.vals))
+        push!(names, lookup => (taken == 0 ? _lookupname(lookup) : Symbol(_lookupname(lookup), :_, taken + 1)))
+        last(names[end])
+    end
+    contributions = Any[]
+    for (key, leaves) in _leaf_groups(op, bi, max_combos)
+        for (pos, stride, dim) in key
+            sites[pos] = (stride, dim)
         end
-        nothing
+        label = join((pos for (pos, _, _) in key), "_")
+        weights = [prod(dim for (_, _, dim) in key[j+1:end]; init=1) for j in eachindex(key)]
+        row = isempty(key) ? nothing : length(key) == 1 ? _digit(key[1][1]) : Symbol(:row, label)
+        length(key) > 1 &&
+            push!(contributions, :($row = $(_sum([_times(weight, _digit(pos)) for ((pos, _, _), weight) in zip(key, weights)]))))
+        todigits(r) = [mod(div(r, weight), dim) for ((_, _, dim), weight) in zip(key, weights)]
+
+        lookupsets = unique(leaf.lookups for leaf in leaves)
+        ntables = 0
+        for lookups in lookupsets
+            rows = [Pair{Vector{Int},Any}[] for _ in 1:prod(dim for (_, _, dim) in key; init=1)]
+            for leaf in leaves
+                leaf.lookups == lookups || continue
+                from = [s.from for s in leaf.sites]
+                entries = rows[sum([s.to for s in leaf.sites] .* weights; init=0)+1]
+                k = findfirst(e -> first(e) == from, entries)
+                isnothing(k) ? push!(entries, from => leaf.coef) : (entries[k] = from => last(entries[k]) + leaf.coef)
+            end
+            foreach(entries -> filter!(e -> !iszero(last(e)), entries), rows)
+            T = promote_type((typeof(last(e)) for entries in rows for e in entries)...)
+            summands = Any[]
+            for k in 1:maximum(length, rows)
+                suffix = ntables == 0 ? "" : string('a' + ntables)
+                ntables += 1
+                coefs = [k <= length(entries) ? convert(T, last(entries[k])) : zero(T) for entries in rows]
+                shifts = [k <= length(entries) ? _shift(key, first(entries[k]), todigits(r - 1)) : 0 for (r, entries) in enumerate(rows)]
+                index = if _allequal(shifts)
+                    _shifted(:i, first(shifts))
+                else
+                    shiftname = Symbol(:shift, label, suffix)
+                    push!(tables, :($shiftname = $(Expr(:tuple, shifts...))))
+                    :(i + $shiftname[$row+1])
+                end
+                if _allequal(coefs)
+                    push!(summands, _product(first(coefs), [:(v[$index])]))
+                else
+                    coefname = Symbol(:coef, label, suffix)
+                    push!(tables, :($coefname = $(Tuple(coefs))))
+                    push!(summands, :($coefname[$row+1] * v[$index]))
+                end
+            end
+            isempty(summands) || push!(contributions, :(acc += $(_product(true, Any[map(name, lookups)..., _sum(summands)]))))
+        end
     end
+
+    positions = sort!(collect(keys(sites)))
+    digits = [:($(_digit(pos)) = $(sites[pos][1] == 1 ? :(mod(i0, $(sites[pos][2]))) :
+                                   :(mod(div(i0, $(_stride(pos))), $(sites[pos][2])))))
+              for pos in positions]
+    factors = [:($sym = $(lookup.vals)[$(_digit(lookup.pos))+1]) for (lookup, sym) in sort!(names; by=p -> first(p).pos)]
+    bindings = Any[(:($(_stride(pos)) = $(sites[pos][1])) for pos in positions)..., tables...]
+    statements = Any[:(acc = zero(promote_type(eltype(w), eltype(v), $Tm))), :(i0 = (i - 1) % UInt),
+        digits..., factors..., contributions..., :(w[i] = acc)]
+    bindings, statements
 end
 
-@generated _apply_index_kernel!(w::AbstractVector, v::AbstractVector, i::Integer, ::Val{S}) where {S} =
-    _kernel_index_expr(S, promote_type(eltype(w), eltype(v), _spec_eltype(S)))
+_allequal(xs) = all(==(first(xs)), xs)
 
-_apply_kernel_range!(w::AbstractVector, v::AbstractVector, lo::Int, hi::Int, spec::Val) = begin
-    for i in lo:hi
-        _apply_index_kernel!(w, v, i, spec)
-    end
-    w
+_threaded_statements(op::AbstractOp, bi, max_combos, Tm, threads) = begin
+    bindings, statements = _table_loop(op, bi, max_combos, Tm)
+    loop = _inbounds(_for(:i, :(lo:hi), statements))
+    task = isempty(bindings) ? loop : _let(bindings, [loop])
+    Any[_sync(_for(:((lo, hi)), Tuple(_chunks(basisdim(bi), threads)), [_spawn(task)]))]
 end
+
+_function(args, statements) = Expr(:function, Expr(:tuple, args...), Expr(:block, statements...))
+
+_inplace_kernel_expr(statements) =
+    _function([:(w::AbstractVector), :(v::AbstractVector)], Any[statements..., :w])
+
+_allocating_kernel_expr(statements, Tm) =
+    _function([:(v::AbstractVector)], Any[:(w = similar(v, promote_type($Tm, eltype(v)))), statements..., :w])
+
+_nterms(::Op) = 1
+_nterms(os::OpSum) = sum(_nterms, os.ops; init=0)
+_nterms(oc::OpChain) = prod(_nterms, oc.ops; init=1)
 
 _chunks(N, nchunks) = begin
     nchunks = min(nchunks, N)
@@ -255,62 +329,88 @@ end
 
 # public interface
 #
-# `CompiledApply` (from `compile_apply`) allocates; `CompiledApplyInPlace` (from
-# `compile_apply!`) writes into a caller-supplied buffer.
+# `compile_apply` returns a `CompiledApply` or `ThreadedCompiledApply`, `compile_apply!` a
+# `CompiledApplyInPlace` or `ThreadedCompiledApplyInPlace`.
 
-_compile_spec(op::AbstractOp, bi, threads::Integer, max_combos::Integer) = begin
+_compile_kernel(op::AbstractOp, bi, threads::Integer, max_combos::Integer; inplace::Bool) = begin
     threads >= 1 || throw(ArgumentError("threads must be at least 1, got $threads."))
     max_combos >= 1 || throw(ArgumentError("max_combos must be at least 1, got $max_combos."))
     # tagged sites are resolved into explicit string factors first
-    spec = _apply_spec(_jw_expand(op, bi), bi, max_combos)
-    isbits(spec) || throw(ArgumentError(
-        "compile_apply requires isbits matrix elements (e.g. Float64 or ComplexF64) to lift the operator into the type domain."))
-    spec
-end
-
-_run_kernel!(w::AbstractVector, v::AbstractVector, ::Val{S}, ::Val{T}) where {S,T} = begin
-    if T == 1
-        _apply_kernel!(w, v, Val(S))
-    else
-        @sync for (lo, hi) in _chunks(S[1], T)
-            Threads.@spawn _apply_kernel_range!(w, v, lo, hi, Val(S))
-        end
-    end
-    w
+    plain = _jw_expand(op, bi)
+    Tm = _result_eltype(op, bi)
+    statements = threads == 1 ? _serial_statements(plain, bi, max_combos) :
+                 _threaded_statements(plain, bi, max_combos, Tm, threads)
+    code = inplace ? _inplace_kernel_expr(statements) : _allocating_kernel_expr(statements, Tm)
+    Core.eval(@__MODULE__, code), code, _nterms(plain)
 end
 
 _check_len(v, N, label) = length(v) == N || throw(DimensionMismatch(
     "$label vector of length $(length(v)) does not match basis of total dimension $N."))
 
-struct _CompiledApply{S,T} <: Function end
-struct _CompiledApplyInPlace{S,T} <: Function end
+struct CompiledApply{F,Tm} <: Function
+    kernel::F
+    code::Expr
+    nterms::Int
+    dim::Int
+end
+
+struct ThreadedCompiledApply{F,Tm} <: Function
+    kernel::F
+    code::Expr
+    nterms::Int
+    dim::Int
+    threads::Int
+end
+
+struct CompiledApplyInPlace{F} <: Function
+    kernel::F
+    code::Expr
+    nterms::Int
+    dim::Int
+end
+
+struct ThreadedCompiledApplyInPlace{F} <: Function
+    kernel::F
+    code::Expr
+    nterms::Int
+    dim::Int
+    threads::Int
+end
+
+const _CompiledAllocating{F,Tm} = Union{CompiledApply{F,Tm},ThreadedCompiledApply{F,Tm}}
+const _CompiledInPlace = Union{CompiledApplyInPlace,ThreadedCompiledApplyInPlace}
+
+kernel_code(c::Union{_CompiledAllocating,_CompiledInPlace}) = c.code
+
+_threads(::Union{CompiledApply,CompiledApplyInPlace}) = 1
+_threads(c::Union{ThreadedCompiledApply,ThreadedCompiledApplyInPlace}) = c.threads
 
 """
-    compile_apply(op::AbstractOp, bi::AbstractVector{<:Pair} = basis_info(op);
-                  threads::Integer = Threads.nthreads(), max_combos::Integer = 65536)
+    compile_apply(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op);
+                  threads::Integer=1, max_combos::Integer=65536)
 
 Generate a specialized, allocating kernel for applying the fixed operator `op` to state
 vectors over the Hilbert space described by `bi` (same conventions as [`apply`](@ref)).
 Returns a callable `c` with one method, `c(v)`, which allocates and returns a new vector
-with the element type promoted as needed -- mirroring [`apply`](@ref). See
-[`compile_apply!`](@ref) for the in-place counterpart, `c!(w, v)`, mirroring [`apply!`](@ref).
+with the element type promoted as needed, mirroring [`apply`](@ref). See
+[`compile_apply!`](@ref) for the in-place version.
 
-The kernel is compiled on first call and reused afterwards, so this pays off when the same
-operator is applied many times, e.g. inside an iterative solver. Sites with a
-[`Fermionic`](@ref) [`ExchangeStyle`](@ref) (e.g. [`fermion`](@ref)-tagged) are supported.
+The kernel follows the structure of the operator explicitly: different ordering in sums and products
+will result in different generated code representing the operator. The returned function is compiled
+once on first use.
 
 # Arguments
 - `bi`: `site => dim` pairs defining the system, e.g. `basis_info(op)`.
 - `threads`: number of tasks the application is split into, baked into the returned
   callable. Threading pays off for large Hilbert spaces; for small ones the task overhead
   dominates, so prefer `threads = 1` there.
-- `max_combos`: cap on the number of combinations generated per term. Terms wider than this
+- `max_combos`: cap on the number of local basis combinations a single term may branch
+  over (the product of the dimensions of its non-diagonal sites). Terms wider than this
   raise an `ArgumentError`; either raise the cap (compilation gets slow and memory-hungry)
   or use [`apply`](@ref)/[`apply!`](@ref), which have no term-width cost.
 
-Matrix elements must be isbits (e.g. `Float64`, `ComplexF64`). Generated code grows with the
-local dimensions and the number of non-zero matrix elements, so this is intended for the
-usual case of small local matrices.
+Generated code grows with the local dimensions and the number of non-zero matrix elements,
+so this is intended for the usual case of sparse local matrices.
 
 # Examples
 ```julia
@@ -323,20 +423,21 @@ c(v) ≈ apply(H, v, bi)  # true
 
 See also: [`compile_apply!`](@ref), [`apply`](@ref), [`apply!`](@ref), [`basis_info`](@ref)
 """
-compile_apply(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op); threads::Integer=Threads.nthreads(), max_combos::Integer=65536) =
-    _CompiledApply{_compile_spec(op, bi, threads, max_combos),Int(threads)}()
+compile_apply(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op); threads::Integer=1, max_combos::Integer=65536) = begin
+    kernel, code, nterms = _compile_kernel(op, bi, threads, max_combos; inplace=false)
+    F, Tm, dim = typeof(kernel), _result_eltype(op, bi), basisdim(bi)
+    threads == 1 ? CompiledApply{F,Tm}(kernel, code, nterms, dim) :
+    ThreadedCompiledApply{F,Tm}(kernel, code, nterms, dim, threads)
+end
 
 """
-    compile_apply!(op::AbstractOp, bi::AbstractVector{<:Pair} = basis_info(op); threads::Integer = Threads.nthreads(), max_combos::Integer = 65536)
+    compile_apply!(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op); threads::Integer=1, max_combos::Integer=65536)
 
 Generate a specialized, in-place kernel for applying the fixed operator `op` to state
 vectors over the Hilbert space described by `bi` (same conventions as [`apply!`](@ref)).
 Returns a callable `c!` with one method, `c!(w, v)`, which writes `op * v` into `w` (which
-must not alias `v`) and returns it -- mirroring [`apply!`](@ref); `v` is left untouched. See
-[`compile_apply`](@ref) for the allocating counterpart, `c(v)`, mirroring [`apply`](@ref).
-
-Every other aspect (`threads`, `max_combos`, tagged-site support, isbits requirement) is
-identical to [`compile_apply`](@ref) -- see there for the full description.
+must not alias `v`) and returns it, mirroring [`apply!`](@ref); `v` is left untouched.
+See [`compile_apply`](@ref) for more details.
 
 # Examples
 ```julia
@@ -350,28 +451,33 @@ c!(w, v) ≈ apply(H, v, bi)  # true, and w === the returned value
 
 See also: [`compile_apply`](@ref), [`apply`](@ref), [`apply!`](@ref), [`basis_info`](@ref)
 """
-compile_apply!(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op); threads::Integer=Threads.nthreads(), max_combos::Integer=65536) =
-    _CompiledApplyInPlace{_compile_spec(op, bi, threads, max_combos),Int(threads)}()
-
-(c::_CompiledApply{S,T})(v::AbstractVector) where {S,T} = begin
-    _check_len(v, S[1], "Input")
-    w = similar(v, promote_type(_spec_eltype(S), eltype(v)))
-    _run_kernel!(w, v, Val(S), Val(T))
+compile_apply!(op::AbstractOp, bi::AbstractVector{<:Pair}=basis_info(op); threads::Integer=1, max_combos::Integer=65536) = begin
+    kernel, code, nterms = _compile_kernel(op, bi, threads, max_combos; inplace=true)
+    F, dim = typeof(kernel), basisdim(bi)
+    threads == 1 ? CompiledApplyInPlace{F}(kernel, code, nterms, dim) :
+    ThreadedCompiledApplyInPlace{F}(kernel, code, nterms, dim, threads)
 end
 
-(c::_CompiledApplyInPlace{S,T})(w::AbstractVector, v::AbstractVector) where {S,T} = begin
-    N = S[1]
-    _check_len(v, N, "Input")
-    _check_len(w, N, "Output")
+(c::_CompiledAllocating{F,Tm})(v::AbstractVector) where {F,Tm} = begin
+    _check_len(v, c.dim, "Input")
+    T = promote_type(Tm, eltype(v))
+    Base.invokelatest(c.kernel, v)::Base.promote_op(similar, typeof(v), Type{T})
+end
+
+(c::_CompiledInPlace)(w::AbstractVector, v::AbstractVector) = begin
+    _check_len(v, c.dim, "Input")
+    _check_len(w, c.dim, "Output")
     Base.mightalias(w, v) && throw(ArgumentError(
         "Output and input vectors must not alias; use `compile_apply` for the allocating form."))
-    _run_kernel!(w, v, Val(S), Val(T))
+    Base.invokelatest(c.kernel, w, v)
+    w
 end
 
-Base.show(io::IO, ::_CompiledApply{S,T}) where {S,T} =
-    print(io, "apply(", length(S[2]), " terms, dim ", S[1], ", ", T, T == 1 ? " thread)" : " threads)")
-Base.show(io::IO, ::MIME"text/plain", c::_CompiledApply) = show(io, c)
+_show_compiled(io::IO, name, c) =
+    print(io, name, "(", c.nterms, " terms, dim ", c.dim, ", ", _threads(c), _threads(c) == 1 ? " thread)" : " threads)")
 
-Base.show(io::IO, ::_CompiledApplyInPlace{S,T}) where {S,T} =
-    print(io, "apply!(", length(S[2]), " terms, dim ", S[1], ", ", T, T == 1 ? " thread)" : " threads)")
-Base.show(io::IO, ::MIME"text/plain", c::_CompiledApplyInPlace) = show(io, c)
+Base.show(io::IO, c::_CompiledAllocating) = _show_compiled(io, "apply", c)
+Base.show(io::IO, ::MIME"text/plain", c::_CompiledAllocating) = show(io, c)
+
+Base.show(io::IO, c::_CompiledInPlace) = _show_compiled(io, "apply!", c)
+Base.show(io::IO, ::MIME"text/plain", c::_CompiledInPlace) = show(io, c)

@@ -277,17 +277,115 @@ end
 
     @testset "threads is baked into the callable" begin
         bi = [1 => 2]
-        @test compile_apply(Op(PAULI_X, 1), bi) isa
-              OperatorAlgebra._CompiledApply{<:Any,Threads.nthreads()}
-        @test compile_apply(Op(PAULI_X, 1), bi; threads=3) isa
-              OperatorAlgebra._CompiledApply{<:Any,3}
+        @test compile_apply(Op(PAULI_X, 1), bi; threads=1) isa OperatorAlgebra.CompiledApply
+        @test compile_apply(Op(PAULI_X, 1), bi; threads=3) isa OperatorAlgebra.ThreadedCompiledApply
+        @test compile_apply(Op(PAULI_X, 1), bi; threads=3).threads == 3
         @test_throws ArgumentError compile_apply(Op(PAULI_X, 1), bi; threads=0)
 
-        @test compile_apply!(Op(PAULI_X, 1), bi) isa
-              OperatorAlgebra._CompiledApplyInPlace{<:Any,Threads.nthreads()}
-        @test compile_apply!(Op(PAULI_X, 1), bi; threads=3) isa
-              OperatorAlgebra._CompiledApplyInPlace{<:Any,3}
+        @test compile_apply!(Op(PAULI_X, 1), bi; threads=1) isa OperatorAlgebra.CompiledApplyInPlace
+        @test compile_apply!(Op(PAULI_X, 1), bi; threads=3) isa OperatorAlgebra.ThreadedCompiledApplyInPlace
+        @test compile_apply!(Op(PAULI_X, 1), bi; threads=3).threads == 3
         @test_throws ArgumentError compile_apply!(Op(PAULI_X, 1), bi; threads=0)
+    end
+
+    @testset "the result is a function, callable where it was compiled" begin
+        bi = [1 => 2, 2 => 3, 3 => 2]
+        H = Op(PAULI_X, 1) * Op(rand(3, 3), 2) + 0.5 * Op(PAULI_Z, 3)
+        v = rand(ComplexF64, prod(last, bi))
+        expected = apply(H, v, bi)
+
+        @test compile_apply(H, bi) isa Function
+        @test compile_apply!(H, bi) isa Function
+
+        c! = compile_apply!(H, bi; threads=1)
+        @test OperatorAlgebra.kernel_code(c!) isa Expr
+        @test eval(OperatorAlgebra.kernel_code(c!))(similar(v), v) ≈ expected
+
+        compile_and_apply(op, v; threads) = compile_apply(op, bi; threads)(v)
+        compile_and_apply!(w, op, v; threads) = compile_apply!(op, bi; threads)(w, v)
+        for nt in (1, 2)
+            @test compile_and_apply(H, v; threads=nt) ≈ expected
+            @test compile_and_apply!(similar(v), H, v; threads=nt) ≈ expected
+        end
+    end
+
+    @testset "non-isbits element types compile" begin
+        bi = [1 => 2, 2 => 2]
+        H = Op(big.([0.5 1.5; 1.5 -0.25]), 1) * Op(big.([1.0 0.0; 0.0 -1.0]), 2) +
+            Op(big.([0.0 1.0; 1.0 0.0]), 2)
+        v = rand(BigFloat, 4)
+        expected = apply(H, v, bi)
+        for nt in (1, 2)
+            w = compile_apply(H, bi; threads=nt)(v)
+            @test eltype(w) == BigFloat
+            @test w ≈ expected
+            @test compile_apply!(H, bi; threads=nt)(similar(v), v) ≈ expected
+        end
+    end
+
+    @testset "nested sums and products compile as written" begin
+        bi = [1 => 2, 2 => 3, 3 => 2]
+        N = prod(last, bi)
+        A, B, C = Op(rand(ComplexF64, 2, 2), 1), Op(rand(3, 3), 2), Op(rand(2, 2), 3)
+        X1, Z1, Z3 = Op(PAULI_X, 1), Op(PAULI_Z, 1), Op(PAULI_Z, 3)
+        ops = [
+            (A + Z1) * (B + C),
+            (X1 + B) * (Z3 * B + A * C + X1) * (C + Z1),
+            A * (B + C * (Z1 + 0.3 * X1)) + Z3,
+            OpChain(OpSum(OpChain(A, B), C)),
+        ]
+        for op in ops, nt in (1, 2)
+            v = rand(ComplexF64, N)
+            expected = apply(op, v, bi)
+            @test compile_apply(op, bi; threads=nt)(v) ≈ expected
+            @test compile_apply!(op, bi; threads=nt)(similar(v), v) ≈ expected
+        end
+    end
+
+    @testset "terms on the same sites are merged" begin
+        bi = [1 => 2, 2 => 2]
+        v = rand(ComplexF64, 4)
+        flipflop = Op(PAULI_X, 1) * Op(PAULI_X, 2) + Op(PAULI_Y, 1) * Op(PAULI_Y, 2)
+        cancelling = Op(PAULI_X, 1) * Op(PAULI_Z, 2) - Op(PAULI_X, 1) * Op(PAULI_Z, 2)
+        for nt in (1, 2)
+            @test compile_apply(flipflop, bi; threads=nt)(v) ≈ apply(flipflop, v, bi)
+            @test iszero(compile_apply(cancelling, bi; threads=nt)(v))
+        end
+
+        writes(op) = count("+=", string(OperatorAlgebra.kernel_code(compile_apply!(op, bi; threads=1))))
+        @test writes(Op(PAULI_X, 1) * Op(PAULI_X, 2)) == 4
+        @test writes(flipflop) == 2
+    end
+
+    @testset "annihilated states and same-site diagonal factors" begin
+        bi = [1 => 2, 2 => 2]
+        v = rand(ComplexF64, 4)
+        n, lower = Op([0 0; 0 1], 1), Op([0 1; 0 0], 2)
+        ops = [
+            n * lower + Op(PAULI_X, 1),
+            Op(PAULI_Z, 1) * Op(PAULI_X, 1),
+            Op(PAULI_X, 1) * Op(PAULI_Z, 1) * Op(PAULI_Z, 2),
+            Op([0 0; 0 0], 1) * Op(PAULI_X, 2),
+            OpSum(),
+        ]
+        for op in ops, nt in (1, 2)
+            @test compile_apply(op, bi; threads=nt)(v) ≈ apply(op, v, bi)
+        end
+    end
+
+    @testset "kernel_code is the complete kernel" begin
+        bi = [1 => 2, 2 => 2]
+        H = Op(PAULI_X, 1) * Op(PAULI_X, 2) + 0.5 * Op(PAULI_Z, 2)
+        v = rand(ComplexF64, 4)
+        expected = apply(H, v, bi)
+        for nt in (1, 2)
+            c = compile_apply(H, bi; threads=nt)
+            c! = compile_apply!(H, bi; threads=nt)
+            @test eval(OperatorAlgebra.kernel_code(c))(v) ≈ expected
+            @test eval(OperatorAlgebra.kernel_code(c!))(similar(v), v) ≈ expected
+            @test (@inferred c(v)) isa Vector{ComplexF64}
+            @test (@inferred c!(similar(v), v)) isa Vector{ComplexF64}
+        end
     end
 
     @testset "compile_apply and compile_apply! are not interchangeable" begin
@@ -343,13 +441,17 @@ end
         @test compile_apply(term, bi; threads=4)(v) ≈ expected
 
         # the default max_combos must not reject this: only 2 sites per term are dense
-        @test compile_apply(term, bi) isa OperatorAlgebra._CompiledApply
+        @test compile_apply(term, bi) isa Function
 
         # a genuinely wide *dense* term must still be rejected by the default guard
         bi2 = [i => 2 for i in 1:20]
         wide_dense = prod(Op(rand(ComplexF64, 2, 2), i) for i in 1:20)
         @test_throws ArgumentError compile_apply(wide_dense, bi2)
-        @test compile_apply(wide_dense, bi2; max_combos=2^20) isa OperatorAlgebra._CompiledApply
+
+        bi3 = [i => 2 for i in 1:3]
+        dense3 = prod(Op(rand(ComplexF64, 2, 2), i) for i in 1:3)
+        @test_throws ArgumentError compile_apply(dense3, bi3; max_combos=4)
+        @test compile_apply(dense3, bi3; max_combos=8) isa Function
     end
 end
 
