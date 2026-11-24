@@ -133,4 +133,74 @@ function _symmetry_reduced_H_sparse(H, ba; check_hermitian=true, tol=nothing)
 end
 SparseArrays.sparse(H::AbstractOp, ba::SymBasis.Bases.Basis; kwargs...) = _symmetry_reduced_H_sparse(H, ba; kwargs...)
 
+# compiled apply in a symmetry sector
+
+const OA = OperatorAlgebra
+
+# code of one contribution: the term's partner state is looked up as in `apply!`
+_basis_term(::Type{BaseInt{T,Ti,B}}) where {T,Ti,B} = (coef, shift) -> begin
+    shift == 0 && return OA._vector_term(coef, 0)
+    weight = :(conj(factor) * sqrt(ba.norms[n] / ba.norms[m]) * v[n])
+    lookup = Expr(:block,
+        :((partner, factor) = representative(BaseInt($T($(OA._shifted(:state, shift))); base=$B, Ti=$Ti), ba)),
+        :(n = get(b, partner, 0)),
+        :(n == 0 ? zero(acc) : $(coef isa Expr ? :(c * $weight) : OA._product(coef, [weight]))))
+    coef isa Expr ? Expr(:block, :(c = $coef), :(iszero(c) ? zero(acc) : $lookup)) : lookup
+end
+
+_base(::SymBasis.Bases.Basis{BaseInt{T,Ti,B}}) where {T,Ti,B} = B
+
+_compile_kernel(H::AbstractOp, ba::SymBasis.Bases.Basis, threads::Integer, max_combos::Integer; inplace::Bool) = begin
+    threads >= 1 || throw(ArgumentError("threads must be at least 1, got $threads."))
+    max_combos >= 1 || throw(ArgumentError("max_combos must be at least 1, got $max_combos."))
+    Hd = _todigitsites(H)
+    bi = basis_info(Hd)
+    all(==(_base(ba)), last.(bi)) || throw(DimensionMismatch(
+        "Operator has local dimensions $(unique(last.(bi))), but the basis states have base $(_base(ba))."))
+    plain = OA._jw_expand(Hd, bi)
+    Tfactor = isempty(ba.states) ? Bool : typeof(last(representative(first(ba.states), ba)))
+    Tm = promote_type(OA._result_eltype(Hd, bi), Tfactor, typeof(sqrt(one(eltype(ba.norms)))))
+
+    # digit 1 of a state is its least significant one
+    bindings, contributions = OA._table_statements(plain, reverse(bi), max_combos;
+        index0=:state0, term=_basis_term(eltype(ba.states)), position=OA.rawsite)
+    contributions = replace_index(contributions)
+    statements = Any[:(acc = zero(promote_type(eltype(w), eltype(v), $Tm))), :(state = Int(ba.states[m].value)),
+        :(state0 = state % UInt), contributions..., :(w[m] = acc)]
+    count = length(ba.states)
+    loop(range) = begin
+        body = OA._inbounds(OA._for(:m, range, statements))
+        isempty(bindings) ? body : OA._let(bindings, [body])
+    end
+    chunks = OA._chunks(count, threads)
+    sweep = threads == 1 ? loop(:(1:$count)) : OA._sync(OA._for(:((lo, hi)), Tuple(chunks), [OA._spawn(loop(:(lo:hi)))]))
+    code = inplace ?
+           OA._function([:(w::AbstractVector), :(v::AbstractVector), :ba, :b], Any[sweep, :w]) :
+           OA._function([:(v::AbstractVector), :ba, :b], Any[:(w = similar(v, promote_type($Tm, eltype(v)))), sweep, :w])
+    Core.eval(@__MODULE__, code), code, OA._nterms(plain), Tm
+end
+
+# v[i] -> v[m] in the diagonal terms
+replace_index(x) = x === :i ? :m : x
+replace_index(ex::Expr) = Expr(ex.head, map(replace_index, ex.args)...)
+replace_index(xs::Vector) = Any[replace_index(x) for x in xs]
+
+OperatorAlgebra.compile_apply(H::AbstractOp, ba::SymBasis.Bases.Basis; threads::Integer=Threads.nthreads(), max_combos::Integer=65536) = begin
+    f, code, nterms, Tm = _compile_kernel(H, ba, threads, max_combos; inplace=false)
+    b = Dict(ba.states .=> eachindex(ba.states))
+    kernel = v -> Base.invokelatest(f, v, ba, b)
+    F, dim = typeof(kernel), length(ba.states)
+    threads == 1 ? OA.CompiledApply{F,Tm}(kernel, code, nterms, dim) :
+    OA.ThreadedCompiledApply{F,Tm}(kernel, code, nterms, dim, threads)
+end
+
+OperatorAlgebra.compile_apply!(H::AbstractOp, ba::SymBasis.Bases.Basis; threads::Integer=Threads.nthreads(), max_combos::Integer=65536) = begin
+    f, code, nterms, _ = _compile_kernel(H, ba, threads, max_combos; inplace=true)
+    b = Dict(ba.states .=> eachindex(ba.states))
+    kernel = (w, v) -> Base.invokelatest(f, w, v, ba, b)
+    F, dim = typeof(kernel), length(ba.states)
+    threads == 1 ? OA.CompiledApplyInPlace{F}(kernel, code, nterms, dim) :
+    OA.ThreadedCompiledApplyInPlace{F}(kernel, code, nterms, dim, threads)
+end
+
 end

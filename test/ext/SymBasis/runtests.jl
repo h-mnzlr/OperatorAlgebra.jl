@@ -379,6 +379,62 @@ const RAISEM = [0 0; 1 0]
         end
     end
 
+    @testset "compile_apply agrees with the reduced matrix" begin
+        for N in (3, 4), (name, H) in (("Heisenberg", heisenberg(N)), ("Ising", ising(N))), k in 0:(N-1)
+            ba = transbasis(N, k)
+            isempty(ba.states) && continue
+            nt = iseven(k) ? 1 : 2
+            M = reduced(H, ba)
+            v = ComplexF64[cis(0.3i) * (1 + i) for i in 1:length(ba.states)]
+
+            @test compile_apply(H, ba; threads=nt)(v) ≈ M * v atol = 1e-9
+            w = similar(v)
+            @test compile_apply!(H, ba; threads=nt)(w, v) === w
+            @test w ≈ M * v atol = 1e-9
+        end
+    end
+
+    @testset "compiled kernels are functions and keep their checks" begin
+        ba = transbasis(4, 0)
+        H = ising(4)
+        n = length(ba.states)
+        v = ones(ComplexF64, n)
+        c = compile_apply(H, ba; threads=1)
+        c! = compile_apply!(H, ba; threads=2)
+
+        @test c isa Function
+        @test c! isa Function
+        @test OperatorAlgebra.kernel_code(c) isa Expr
+        @test OperatorAlgebra.kernel_code(c!) isa Expr
+        @test eltype(c(ones(n))) == ComplexF64
+        @test_throws DimensionMismatch c(ones(ComplexF64, n + 1))
+        @test_throws DimensionMismatch c!(ones(ComplexF64, n + 1), v)
+        @test_throws ArgumentError c!(v, v)
+        @test_throws ArgumentError compile_apply(H, ba; threads=0)
+        @test_throws ArgumentError compile_apply!(H, ba; max_combos=0)
+
+        spin1 = Op(zeros(3, 3), 1) + Op(zeros(3, 3), 2) + Op(zeros(3, 3), 3) + Op(zeros(3, 3), 4)
+        @test_throws DimensionMismatch compile_apply(spin1, ba)
+    end
+
+    @testset "compile_apply with fermionic operators" begin
+        N = 4
+        dofo = dof_object(SpinlessFermion())
+        cdag(k) = fermion(Op(RAISEF, k))
+        c(k) = fermion(Op(LOWERF, k))
+        H = sum(cdag(k) * c(k + 1) + cdag(k + 1) * c(k) for k in 1:N-1) +
+            cdag(1) * c(N) + cdag(N) * c(1)
+        for n_particles in 0:N
+            ba = basis(dofo, N, sym(TotalSpinlessFermionicNumber(n_particles, N), dofo))
+            isempty(ba.states) && continue
+            Hred = Matrix(sparse(H, ba))
+            v = ComplexF64[cis(0.3i) * (1 + i) for i in 1:length(ba.states)]
+            for nt in (1, 2)
+                @test compile_apply(H, ba; threads=nt)(v) ≈ Hred * v atol = 1e-9
+            end
+        end
+    end
+
     # regressions
     # Both of these were real defects, found by these tests and since fixed. They only ever
     # show up when a symmetry phase is *not* a Gaussian integer: at N = 4 every translational
@@ -448,3 +504,5 @@ const RAISEM = [0 0; 1 0]
         end
     end
 end
+
+include("test_compiled_apply.jl")
